@@ -40,7 +40,7 @@ export default function LoginPage() {
              </div>
              <Button variant="outline" className="w-full">Google</Button>
              <div className="text-center text-sm text-muted-foreground">
-                Don't have an account? <Link href="/signup" className="text-primary hover:underline font-medium">Sign up</Link>
+                Don&apos;t have an account? <Link href="/signup" className="text-primary hover:underline font-medium">Sign up</Link>
              </div>
           </CardFooter>
        </Card>

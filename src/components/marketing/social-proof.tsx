@@ -32,7 +32,7 @@ export function SocialProof() {
                  <div className="flex gap-1 text-orange-500 mb-6">
                     {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 fill-current" />)}
                  </div>
-                 <p className="text-lg mb-6 text-foreground font-medium leading-relaxed">"{t.text}"</p>
+                 <p className="text-lg mb-6 text-foreground font-medium leading-relaxed">&quot;{t.text}&quot;</p>
                  <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-muted-foreground">
                         {t.name[0]}

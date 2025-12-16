@@ -44,8 +44,8 @@ export function HumanLoop() {
               </div>
               <h2 className="text-3xl md:text-5xl font-bold font-heading mb-6">You are the Editor-in-Chief.</h2>
               <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-                Most AI tools post garbage automatically. We don't. 
-                Our "Human-in-the-Loop" workflow ensures nothing goes live 
+                Most AI tools post garbage automatically. We don&apos;t. 
+                Our &quot;Human-in-the-Loop&quot; workflow ensures nothing goes live 
                 without your explicit one-click approval.
               </p>
               
