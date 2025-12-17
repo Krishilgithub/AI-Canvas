@@ -28,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
+        suppressHydrationWarning
         className={`${inter.variable} ${manrope.variable} antialiased font-sans bg-background text-foreground`}
       >
         <SmoothScroll>{children}</SmoothScroll>
