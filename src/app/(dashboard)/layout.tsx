@@ -3,11 +3,15 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-secondary/5 font-sans">
-       <Sidebar />
-       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-          {/* Main Content Area */}
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth">
-             <div className="max-w-6xl mx-auto space-y-8 pb-20">
+       <aside className="sticky top-0 h-screen hidden md:block">
+          <Sidebar />
+       </aside>
+       {/* Mobile sidebar handling would go here, or Sidebar handles it internally */}
+       
+       <div className="flex-1 flex flex-col min-h-screen">
+          {/* Main Content Area - Flows naturally with window scroll */}
+          <main className="flex-1 p-4 md:p-8 pb-20">
+             <div className="max-w-6xl mx-auto space-y-8">
                 {children}
              </div>
           </main>
