@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Linkedin, Settings, Workflow, LogOut, Sparkles, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { signout } from "@/lib/supabase/actions";
+import { useState } from "react";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -15,6 +17,12 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    await signout();
+  };
 
   return (
     <aside className="w-64 border-r border-border bg-card hidden md:flex flex-col h-screen sticky top-0">
@@ -61,8 +69,14 @@ export function Sidebar() {
       
       <div className="p-4 border-t border-border/50 bg-secondary/10">
          <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-primary/50 flex items-center justify-center text-sm font-bold text-primary-foreground ring-2 ring-background">KA</div>
-            <div className="flex-1 overflow-hidden">
+            <div 
+           variant="ghost" 
+           size="sm" 
+           className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+           onClick={handleSignOut}
+           disabled={isSigningOut}
+         >
+            <LogOut className="mr-2 h-4 w-4" /> {isSigningOut ? "Signing Out..." : "Sign Out"}
                <p className="text-sm font-medium truncate">Krishil Agrawal</p>
                <p className="text-xs text-muted-foreground truncate">Enterprise Plan</p>
             </div>
