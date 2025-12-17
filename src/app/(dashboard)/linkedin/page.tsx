@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Sparkles, Sliders, LayoutList, History } from "lucide-react";
+import { Sparkles, Filter, Search, MoreHorizontal, ArrowRight, LayoutList, Sliders, History } from "lucide-react";
 import { ConfigurationPanel } from "@/components/linkedin/configuration-panel";
 import { ContentApproval } from "@/components/linkedin/content-approval";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export default function LinkedInPage() {
@@ -51,6 +52,25 @@ export default function LinkedInPage() {
 }
 
 function TrendsView() {
+  const [trends, setTrends] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // In a real app, this should user SWR or React Query
+  // For this demo, simple effect is fine
+  useEffect(() => {
+    fetch('http://localhost:4000/api/v1/automation/trends')
+      .then(res => res.json())
+      .then(data => {
+         setTrends(Array.isArray(data) ? data : []);
+         setLoading(false);
+      })
+      .catch(err => {
+         console.error("Fetch error:", err);
+         toast.error("Could not connect to backend", { description: "Is the server running on port 4000?" });
+         setLoading(false);
+      });
+  }, []);
+
   return (
      <div className="space-y-6">
         {/* Quick Stats Row */}
@@ -66,11 +86,11 @@ function TrendsView() {
            </Card>
             <Card>
               <CardHeader className="pb-2">
-                 <CardDescription>Generations Today</CardDescription>
-                 <CardTitle className="text-2xl">12</CardTitle>
+                 <CardDescription>Active Trends</CardDescription>
+                 <CardTitle className="text-2xl">{trends.length}</CardTitle>
               </CardHeader>
               <CardContent>
-                 <div className="text-xs text-muted-foreground">4 drafts pending review.</div>
+                 <div className="text-xs text-muted-foreground">Detected in last 24h.</div>
               </CardContent>
            </Card>
            <Card>
@@ -92,11 +112,22 @@ function TrendsView() {
                     <CardDescription>Topics currently gaining velocity in your niche.</CardDescription>
                  </div>
                  <div className="flex gap-2">
-                    <div className="relative">
-                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                       <Input placeholder="Search trends..." className="pl-8 w-64 bg-background" />
-                    </div>
-                    <Button variant="outline" size="icon"><Filter className="h-4 w-4" /></Button>
+                     <Button variant="outline" size="sm" onClick={() => {
+                        toast.promise(
+                            fetch('http://localhost:4000/api/v1/automation/seed', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ user_id: 'test-user-123' }) 
+                            }).then(() => window.location.reload()),
+                            {
+                                loading: 'Simulating AI agents...',
+                                success: 'Trends & Drafts generated!',
+                                error: 'Failed to simulate agents'
+                            }
+                        );
+                    }}>
+                       <Sparkles className="mr-2 h-4 w-4" /> Simulate AI Agent
+                    </Button>
                  </div>
               </div>
            </CardHeader>
@@ -108,37 +139,35 @@ function TrendsView() {
                           <th className="px-6 py-3">Topic</th>
                           <th className="px-6 py-3">Category</th>
                           <th className="px-6 py-3">Viral Velocity</th>
-                          <th className="px-6 py-3">Competition</th>
                           <th className="px-6 py-3 text-right">Action</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                       {[
-                         { topic: "The rise of 'Agentic' workflows in SaaS", cat: "Artificial Intelligence", velocity: 98, diff: "Medium" },
-                         { topic: "Why 'Founder Mode' is controversial", cat: "Startups", velocity: 92, diff: "High" },
-                         { topic: "Next.js 15 Server Actions patterns", cat: "Web Development", velocity: 74, diff: "Low" },
-                         { topic: "Remote work vs. RTO mandates data", cat: "Future of Work", velocity: 65, diff: "Very High" },
-                         { topic: "Micro-SaaS acquisition multiples", cat: "Business", velocity: 58, diff: "Medium" },
-                       ].map((row, i) => (
-                          <tr key={i} className="group hover:bg-secondary/5 transition-colors">
-                             <td className="px-6 py-4 font-medium text-foreground">{row.topic}</td>
-                             <td className="px-6 py-4"><span className="px-2 py-1 rounded-full bg-secondary text-xs font-medium border border-border">{row.cat}</span></td>
-                             <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                   <span className={row.velocity > 80 ? "text-green-500 font-bold" : "text-amber-500 font-medium"}>{row.velocity}/100</span>
-                                   <div className="h-1.5 w-16 bg-secondary rounded-full overflow-hidden">
-                                      <div className={`h-full rounded-full ${row.velocity > 80 ? "bg-green-500" : "bg-amber-500"}`} style={{ width: `${row.velocity}%` }} />
+                       {loading ? (
+                          <tr><td colSpan={4} className="p-4 text-center">Loading trends...</td></tr>
+                       ) : trends.length === 0 ? (
+                          <tr><td colSpan={4} className="p-4 text-center">No trends detected. Click "Simulate AI Agent" to seed data.</td></tr>
+                       ) : (
+                          trends.map((row, i) => (
+                             <tr key={i} className="group hover:bg-secondary/5 transition-colors">
+                                <td className="px-6 py-4 font-medium text-foreground">{row.topic}</td>
+                                <td className="px-6 py-4"><span className="px-2 py-1 rounded-full bg-secondary text-xs font-medium border border-border">{row.category}</span></td>
+                                <td className="px-6 py-4">
+                                   <div className="flex items-center gap-2">
+                                      <span className={row.velocity_score > 80 ? "text-green-500 font-bold" : "text-amber-500 font-medium"}>{row.velocity_score}/100</span>
+                                      <div className="h-1.5 w-16 bg-secondary rounded-full overflow-hidden">
+                                         <div className={`h-full rounded-full ${row.velocity_score > 80 ? "bg-green-500" : "bg-amber-500"}`} style={{ width: `${row.velocity_score}%` }} />
+                                      </div>
                                    </div>
-                                </div>
-                             </td>
-                             <td className="px-6 py-4 text-muted-foreground">{row.diff}</td>
-                             <td className="px-6 py-4 text-right">
-                                <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                   <Sparkles className="mr-2 h-3 w-3" /> Draft Post
-                                </Button>
-                             </td>
-                          </tr>
-                       ))}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                   <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Sparkles className="mr-2 h-3 w-3" /> Draft Post
+                                   </Button>
+                                </td>
+                             </tr>
+                          ))
+                       )}
                     </tbody>
                  </table>
               </div>

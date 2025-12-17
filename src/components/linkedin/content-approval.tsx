@@ -1,30 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Check, X, RefreshCw, Edit3, Calendar, MoreHorizontal, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// Mock Data
-const drafts = [
-  { id: 1, title: "The Death of SaaS Pricing", status: "needs_review", date: "Today, 2:00 PM", preview: "Most SaaS pricing pages are broken. They focus on features, not outcomes..." },
-  { id: 2, title: "AI vs Human Creativity", status: "approved", date: "Tomorrow, 9:00 AM", preview: "There is a myth that AI kills creativity. In reality, it forces us to be MORE creative..." },
-  { id: 3, title: "Remote Work Paradox", status: "rejected", date: "Dec 12", preview: "Why is everyone rushing back to the office? The data suggests productivity is actually..." },
-];
+import { toast } from "sonner";
 
 export function ContentApproval() {
-  const [selectedPostId, setSelectedPostId] = useState<number>(1);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<any[]>([]);
   const [editMode, setEditMode] = useState(false);
-  const [content, setContent] = useState("Most SaaS pricing pages are broken. \n\nThey focus on features, not outcomes. \n\nI analyzed 500+ YC startups and found a pattern: \n\n1. The best ones charge for value \n2. The worst ones charge for seats \n\nValue-based pricing aligns your incentives with the customer. Seat-based pricing aligns your incentives with inefficiency. \n\nStop punishing your customers for growing.");
+  const [content, setContent] = useState("");
+
+  // Fetch Drafts
+  const fetchDrafts = () => {
+    fetch('http://localhost:4000/api/v1/automation/posts?user_id=test-user-123')
+      .then(res => res.json())
+      .then(data => {
+         setDrafts(Array.isArray(data) ? data : []);
+         if (data.length > 0 && !selectedPostId) {
+            setSelectedPostId(data[0].id);
+            setContent(data[0].content);
+         }
+      })
+      .catch(err => {
+        console.error("Fetch error:", err);
+        toast.error("Could not fetch drafts", { description: "Is the backend server running?" });
+      });
+  };
+
+  useEffect(() => {
+     fetchDrafts();
+  }, []);
+
+  useEffect(() => {
+     if (selectedPostId) {
+        const post = drafts.find(d => d.id === selectedPostId);
+        if (post) setContent(post.content);
+     }
+  }, [selectedPostId, drafts]);
 
   const activePost = drafts.find(d => d.id === selectedPostId);
+
+
+  const handleApprove = async () => {
+     if (!activePost) return;
+     toast.promise(
+         fetch('http://localhost:4000/api/v1/automation/trigger-post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ post_id: activePost.id, user_id: activePost.user_id })
+         }).then(() => fetchDrafts()),
+         {
+             loading: 'Publishing to LinkedIn...',
+             success: 'Post published successfully!',
+             error: 'Failed to publish post'
+         }
+     );
+  };
 
   return (
     <div className="grid lg:grid-cols-12 gap-6 h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
        
        {/* Left: Queue List */}
        <div className="lg:col-span-4 flex flex-col gap-4 overflow-y-auto pr-2">
+          {drafts.length === 0 && (
+             <div className="p-8 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                No drafts found. <br /> Check the Trends tab to generate some.
+             </div>
+          )}
           {drafts.map(draft => (
              <div 
                key={draft.id}
@@ -37,27 +82,30 @@ export function ContentApproval() {
                )}
              >
                 <div className="flex justify-between items-start mb-2">
-                   <h4 className={cn("font-semibold text-sm line-clamp-1", selectedPostId === draft.id ? "text-primary" : "text-foreground")}>{draft.title}</h4>
+                   <h4 className={cn("font-semibold text-sm line-clamp-1", selectedPostId === draft.id ? "text-primary" : "text-foreground")}>
+                      {draft.content.substring(0, 30)}...
+                   </h4>
                    <StatusBadge status={draft.status} />
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
-                   {draft.preview}
+                   {draft.content}
                 </p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                   <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {draft.date}</span>
+                   <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(draft.created_at).toLocaleDateString()}</span>
                 </div>
              </div>
           ))}
        </div>
 
        {/* Right: Editor / Preview */}
+       {activePost ? (
        <Card className="lg:col-span-8 flex flex-col border-border shadow-sm overflow-hidden h-full">
           <div className="border-b px-6 py-4 flex items-center justify-between bg-card">
               <div className="flex items-center gap-3">
                  <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                  <div>
-                    <h3 className="font-bold text-sm">Reviewing: {activePost?.title}</h3>
-                    <p className="text-xs text-muted-foreground">Generated by Agent v4.2 • 342 words</p>
+                    <h3 className="font-bold text-sm">Reviewing Draft</h3>
+                    <p className="text-xs text-muted-foreground">Generated by Agent • {content.length} chars</p>
                  </div>
               </div>
               <div className="flex gap-2">
@@ -74,7 +122,7 @@ export function ContentApproval() {
                     <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary">KA</div>
                     <div>
                         <div className="font-semibold text-sm">Krishil Agrawal</div>
-                        <div className="text-xs text-muted-foreground">Building AI Canvas • 2h • <span className="opacity-60">🌐</span></div>
+                        <div className="text-xs text-muted-foreground">Building AI Canvas • Now • <span className="opacity-60">🌐</span></div>
                     </div>
                  </div>
                  
@@ -90,11 +138,7 @@ export function ContentApproval() {
                         content
                     )}
                     
-                    {/* Mock Media */}
-                    <div className="mt-6 aspect-video bg-secondary/20 rounded-lg flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer group">
-                       <ImageIcon className="h-8 w-8 mb-2 group-hover:scale-110 transition-transform" />
-                       <span className="text-xs font-medium">Click to Attach Media or Generate with AI</span>
-                    </div>
+                    {/* Mock Media Placeholder if needed */}
                  </div>
 
                  {/* Mock Footer Actions */}
@@ -117,12 +161,23 @@ export function ContentApproval() {
                 <Button variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">
                    <X className="mr-2 h-4 w-4" /> Reject
                 </Button>
-                <Button className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20">
-                   <Check className="mr-2 h-4 w-4" /> Approve & Schedule
-                </Button>
+                {activePost.status === 'published' ? (
+                   <Button disabled className="bg-secondary text-muted-foreground">
+                      <Check className="mr-2 h-4 w-4" /> Published
+                   </Button>
+                ) : (
+                   <Button onClick={handleApprove} className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20">
+                      <Check className="mr-2 h-4 w-4" /> Approve & Schedule
+                   </Button>
+                )}
              </div>
           </div>
        </Card>
+       ) : (
+          <div className="lg:col-span-8 flex items-center justify-center h-full border rounded-xl border-dashed text-muted-foreground">
+             Select a draft to review
+          </div>
+       )}
     </div>
   )
 }
@@ -131,8 +186,13 @@ function StatusBadge({ status }: { status: string }) {
    if (status === "approved") {
       return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20">Approved</span>
    }
+   if (status === "published") {
+      return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">Published</span>
+   }
    if (status === "rejected") {
       return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 border border-red-500/20">Rejected</span>
    }
-   return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">Needs Review</span>
+   return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">Review</span>
 }
+
+

@@ -1,0 +1,80 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export class GeminiService {
+  private genAI: GoogleGenerativeAI | null = null;
+  private model: any = null;
+
+  constructor() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+    } else {
+      console.warn("⚠️ Gemini API key is missing.");
+    }
+  }
+
+  async analyzeTrendPotential(articles: any[]) {
+    if (!this.model) return articles.map(a => ({ ...a, velocity_score: Math.floor(Math.random() * 40) + 30 }));
+
+    try {
+        // We will send a batch of titles to Gemini to score them.
+        const prompt = `
+            Analyze the following news headlines for their potential to be viral LinkedIn discussion topics.
+            Format the output as a JSON array of objects with 'index' and 'velocity_score' (0-100) and a short 'reason'.
+            High scores should be given to: Controverial tech topics, AI breakthroughs, Career advice, Remote work debates.
+            
+            Headlines:
+            ${articles.map((a, i) => `${i}: ${a.title}`).join('\n')}
+        `;
+
+        const result = await this.model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        
+        // Clean markdown code blocks if present
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const analysis = JSON.parse(jsonStr);
+        
+        // Merge analysis with original articles
+        return articles.map((article, index) => {
+            const insight = analysis.find((a: any) => a.index === index);
+            return {
+                ...article,
+                velocity_score: insight ? insight.velocity_score : 50,
+                insight: insight ? insight.reason : 'No analysis available'
+            };
+        });
+
+    } catch (error) {
+        console.error("Gemini analysis failed:", error);
+        // Fallback to random scores
+        return articles.map(a => ({ ...a, velocity_score: Math.floor(Math.random() * 40) + 30 }));
+    }
+  }
+
+  async generateDraft(topic: string, context: string) {
+      if (!this.model) return `[Mock Draft] Insights on ${topic}. ${context}`;
+      
+      try {
+          const prompt = `
+            Write a high-engaging LinkedIn post about: "${topic}".
+            Context from news: "${context}".
+            
+            Style: Professional, Thought Leadership, slightly provocative.
+            Structure: Hook, 3 key points, Call to Action.
+            Length: Under 150 words.
+            No hashtags yet.
+          `;
+          
+          const result = await this.model.generateContent(prompt);
+          return result.response.text();
+      } catch (error) {
+          console.error("Gemini draft generation failed:", error);
+          return `Failed to generate draft for ${topic}.`;
+      }
+  }
+}
+
+export const geminiService = new GeminiService();

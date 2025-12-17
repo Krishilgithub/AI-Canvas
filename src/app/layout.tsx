@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   description: "Enterprise-grade AI content automation for LinkedIn and beyond.",
 };
 
+import { Toaster } from 'sonner';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,6 +34,7 @@ export default function RootLayout({
         className={`${inter.variable} ${manrope.variable} antialiased font-sans bg-background text-foreground`}
       >
         <SmoothScroll>{children}</SmoothScroll>
+        <Toaster position="top-right" theme="light" />
       </body>
     </html>
   );
