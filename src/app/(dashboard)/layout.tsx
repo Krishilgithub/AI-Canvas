@@ -1,8 +1,9 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-secondary/5 font-sans">
+    <div className="flex min-h-screen bg-secondary/5 font-sans" suppressHydrationWarning>
        <aside className="sticky top-0 h-screen hidden md:block">
           <Sidebar />
        </aside>
@@ -16,6 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
              </div>
           </main>
        </div>
+       <OnboardingModal />
     </div>
   )
 }

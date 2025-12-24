@@ -150,45 +150,68 @@ export class RealLinkedInService implements ILinkedInService {
       return data || null;
   }
 
-  async createPost(userId: string, content: string) {
-     const { data: account } = await supabase
+  async createPost(userId: string, content: string, mediaUrls: string[] = []) {
+      // Fetch user account
+      const { data: account } = await supabase
          .from('linked_accounts')
          .select('access_token, platform_user_id')
          .eq('user_id', userId)
          .eq('platform', Platform.LINKEDIN)
          .single();
-
-     if (!account || !account.access_token) throw new Error("LinkedIn account not connected");
-
-     const body = {
-        author: `urn:li:person:${account.platform_user_id}`,
-        lifecycleState: "PUBLISHED",
-        specificContent: {
-            "com.linkedin.ugc.ShareContent": {
-                shareCommentary: {
-                    text: content
-                },
-                shareMediaCategory: "NONE"
-            }
-        },
-        visibility: {
-            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-        }
-    };
-
-    const res = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
-        headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            'X-Restli-Protocol-Version': '2.0.0'
-        }
-    });
-
-    return {
-        success: true,
-        platform_post_id: res.data.id,
-        url: `https://www.linkedin.com/feed/update/${res.data.id}`
-    };
-  }
+ 
+      if (!account || !account.access_token) throw new Error("LinkedIn account not connected");
+      
+      // DELEGATE TO N8N
+      if (process.env.N8N_PUBLISH_WEBHOOK_URL) {
+          console.log(`[LinkedIn] Delegating publishing to n8n for user ${userId}`);
+          const res = await axios.post(process.env.N8N_PUBLISH_WEBHOOK_URL, {
+              accessToken: account.access_token,
+              personUrn: account.platform_user_id,
+              content: content,
+              mediaUrls: mediaUrls
+          });
+          
+          if (res.status === 200 || res.status === 201) {
+              // Assuming n8n returns the LinkedIn response or at least success
+               return {
+                  success: true,
+                  platform_post_id: res.data.id || 'posted-via-n8n',
+                  url: res.data.url || '#' 
+              };
+          }
+           throw new Error("n8n publishing failed");
+      }
+ 
+      // NATIVE PUBLISHING (Fallback)
+      const body = {
+         author: `urn:li:person:${account.platform_user_id}`,
+         lifecycleState: "PUBLISHED",
+         specificContent: {
+             "com.linkedin.ugc.ShareContent": {
+                 shareCommentary: {
+                     text: content
+                 },
+                 shareMediaCategory: "NONE"
+             }
+         },
+         visibility: {
+             "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+         }
+     };
+ 
+     const res = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
+         headers: {
+             Authorization: `Bearer ${account.access_token}`,
+             'X-Restli-Protocol-Version': '2.0.0'
+         }
+     });
+ 
+     return {
+         success: true,
+         platform_post_id: res.data.id,
+         url: `https://www.linkedin.com/feed/update/${res.data.id}`
+     };
+   }
 }
 
 // Factory to switch

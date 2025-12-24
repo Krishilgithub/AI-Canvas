@@ -6,10 +6,12 @@ import { newsService } from '../services/news.service';
 import { geminiService } from '../services/gemini.service';
 import { Platform, PostStatus, LogLevel } from '../constants';
 import { mockStore } from '../store';
+import { EmailService } from '../services/email.service';
 
 export class AutomationController {
   
   private useMockDb = process.env.USE_MOCK_DB === 'true' || process.env.SUPABASE_URL?.includes('placeholder');
+  private emailService = new EmailService();
 
   // 1. Save Configuration
   saveConfig = async (req: AuthRequest, res: Response) => {
@@ -174,6 +176,16 @@ export class AutomationController {
               created_at: new Date().toISOString()
           };
           mockStore.posts.unshift(post);
+
+          // Mock Email Trigger
+          if (req.user?.email) {
+            await this.emailService.sendApprovalRequest(
+                req.user.email, 
+                content.substring(0, 50) + "...", 
+                "http://localhost:3000"
+            );
+          }
+
           return res.json({ success: true, post });
       }
       
@@ -201,6 +213,23 @@ export class AutomationController {
         .single();
 
       if (error) throw error;
+
+      // Check notification preference in Profile
+      if (status === PostStatus.NEEDS_APPROVAL) {
+          const { data: profile } = await supabase
+             .from('profiles')
+             .select('notification_preferences, email')
+             .eq('id', user_id)
+             .single();
+          
+          if (profile?.email && (profile.notification_preferences as any)?.post_approval) {
+             await this.emailService.sendApprovalRequest(
+                 profile.email, 
+                 content.substring(0, 50) + "...", 
+                 process.env.APP_URL || 'http://localhost:3000'
+             );
+          }
+      }
 
       // Log it
       await supabase.from('automation_logs').insert({
@@ -288,7 +317,7 @@ export class AutomationController {
             });
       }
         
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || "Unknown error occurred during posting", details: error });
     }
   }
 
@@ -335,13 +364,13 @@ export class AutomationController {
           if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
           console.log(`[CREATE_POST] Attempting to create for User ID: ${user_id}`);
-          const { content, scheduled_time, status, trend_id } = req.body;
+          const { content, scheduled_time, status, trend_id, media_urls } = req.body;
 
           if (this.useMockDb) {
               console.log('[CREATE_POST] Using Mock DB');
               const post = {
                   id: Math.random().toString(36).substr(2, 9),
-                  user_id, content, scheduled_time, status, trend_id,
+                  user_id, content, scheduled_time, status, trend_id, media_urls,
                   created_at: new Date().toISOString()
               };
               mockStore.posts.unshift(post);
@@ -356,7 +385,8 @@ export class AutomationController {
                   content,
                   scheduled_time,
                   status,
-                  trend_id
+                  trend_id,
+                  media_urls // Added
               })
               .select()
               .single();
@@ -400,6 +430,101 @@ export class AutomationController {
           res.status(500).json({ error: e.message });
       }
   }
+
+    // --- TEAM MANAGEMENT ---
+    getTeamMembers = async (req: AuthRequest, res: Response) => {
+        try {
+            const user_id = req.user?.id;
+            if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+            if (this.useMockDb) {
+                // Return dummy team
+                return res.json([
+                    { id: '1', email: 'you@example.com', role: 'owner', status: 'active', user_id },
+                    { id: '2', email: 'editor@example.com', role: 'editor', status: 'active' },
+                    { id: '3', email: 'new@example.com', role: 'viewer', status: 'pending' }
+                ]);
+            }
+
+            // Real DB
+            const { data, error } = await supabase
+                .from('team_members')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                // If table doesn't exist yet, return empty or self
+                if (error.code === '42P01') {
+                    return res.json([{ id: 'self', email: req.user?.email || 'user', role: 'owner', status: 'active' }]);
+                }
+                throw error;
+            }
+
+            res.json(data);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+
+    inviteTeamMember = async (req: AuthRequest, res: Response) => {
+        try {
+            const user_id = req.user?.id;
+            if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+            const { email, role } = req.body;
+
+            // Generate a join link
+            const inviteLink = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/login` : 'http://localhost:3000/login';
+
+            // Send Email
+            await this.emailService.sendTeamInvitation(email, role, inviteLink);
+
+            if (this.useMockDb) {
+                return res.json({ success: true, message: "Invitation sent via email" });
+            }
+
+            // Real DB - Insert pending member Record
+            // Note: In production this should be a robust invite system.
+            // For MVP, we insert a record linked to the owner so it appears in the list.
+            try {
+                 await supabase.from('team_members').insert({
+                    email, 
+                    role, 
+                    status: 'pending',
+                    invited_by: user_id,
+                    user_id: user_id // Linking to self/owner for visibility (MVP hack)
+                });
+            } catch (dbError) {
+                console.warn("Could not save team_member record, but email was sent.", dbError);
+            }
+            
+            res.json({ success: true, message: `Invitation sent to ${email}` });
+
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+
+    removeTeamMember = async (req: AuthRequest, res: Response) => {
+        try {
+            const user_id = req.user?.id;
+            if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+            const { id } = req.params;
+
+            if (this.useMockDb) {
+                return res.json({ success: true });
+            }
+
+            const { error } = await supabase
+                .from('team_members')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            res.json({ success: true });
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+    }
 
   // 8. Get Analytics
   getAnalytics = async (req: AuthRequest, res: Response) => {
@@ -465,6 +590,68 @@ export class AutomationController {
 
       } catch (e: any) {
           console.error("getAnalytics Error:", e);
+          res.status(500).json({ error: e.message });
+      }
+  }
+
+  exportAnalytics = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          const limit = 30; // Last 30 days
+          const startDate = new Date();
+          startDate.setDate(startDate.getDate() - limit);
+
+          let data: any[] = [];
+
+          if (this.useMockDb) {
+             // Mock Data Gen
+             for(let i=0; i<limit; i++){
+                 const d = new Date();
+                 d.setDate(d.getDate() - i);
+                 data.push({
+                     date: d.toISOString().split('T')[0],
+                     impressions: Math.floor(Math.random() * 1000),
+                     clicks: Math.floor(Math.random() * 50),
+                     likes: Math.floor(Math.random() * 20),
+                     comments: Math.floor(Math.random() * 5),
+                     shares: Math.floor(Math.random() * 3)
+                 });
+             }
+          } else {
+             const { data: realData } = await supabase
+                 .from('analytics_daily')
+                 .select('date, impressions, clicks, likes, comments, shares')
+                 .eq('user_id', user_id)
+                 .gte('date', startDate.toISOString().split('T')[0])
+                 .order('date', { ascending: true });
+             data = realData || [];
+          }
+
+          // Convert to CSV
+          const headers = ['Date', 'Impressions', 'Clicks', 'Likes', 'Comments', 'Shares'];
+          const csvRows = [headers.join(',')];
+
+          data.forEach(row => {
+              const values = [
+                  row.date,
+                  row.impressions,
+                  row.clicks,
+                  row.likes,
+                  row.comments,
+                  row.shares
+              ];
+              csvRows.push(values.join(','));
+          });
+
+          const csvString = csvRows.join('\n');
+
+          res.setHeader('Content-Type', 'text/csv');
+          res.setHeader('Content-Disposition', `attachment; filename="analytics_export_${new Date().toISOString().split('T')[0]}.csv"`);
+          res.send(csvString);
+
+      } catch (e: any) {
           res.status(500).json({ error: e.message });
       }
   }
@@ -674,7 +861,7 @@ export class AutomationController {
           const user_id = req.user?.id;
           if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-          const { full_name, avatar_url, bio } = req.body;
+          const { full_name, avatar_url, bio, role, niche, goals, onboarding_completed } = req.body;
 
           const { data, error } = await supabase
               .from('profiles')
@@ -683,6 +870,11 @@ export class AutomationController {
                   email: req.user.email, // Ensure email is synced from auth
                   full_name,
                   avatar_url,
+                  bio,
+                  role,
+                  niche,
+                  goals,
+                  onboarding_completed,
                   updated_at: new Date().toISOString()
               })
               .select()

@@ -31,3 +31,19 @@ USING (auth.uid() = user_id);
 
 -- Add index
 CREATE INDEX idx_analytics_user_date ON analytics_daily(user_id, date);
+
+-- Add media_urls to generated_posts
+ALTER TABLE generated_posts
+ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}';
+
+-- Create storage bucket for media
+DO $$
+BEGIN
+    INSERT INTO storage.buckets (id, name, public) VALUES ('post-media', 'post-media', true)
+    ON CONFLICT (id) DO NOTHING;
+    
+    -- Policies (We need to drop first to avoid conflict if exists or use IF NOT EXISTS logic which is hard in straightforward SQL for policies)
+    -- Simplified: users must check Dashboard to ensure policies
+EXCEPTION WHEN OTHERS THEN
+    -- Ignore storage errors if storage extension missing
+END $$;

@@ -28,6 +28,7 @@ router.post('/create-draft', requireAuth, validate(createDraftSchema), controlle
 
 // App Data
 router.get('/posts', requireAuth, validate(getPostsSchema), controller.getPosts);
+router.get('/analytics/export', requireAuth, controller.exportAnalytics);
 router.get('/analytics', requireAuth, controller.getAnalytics);
 router.get('/logs', requireAuth, controller.getLogs);
 router.get('/profile', requireAuth, controller.getProfile);
@@ -38,6 +39,11 @@ router.post('/posts', requireAuth, validate(createPostSchema), controller.create
 router.delete('/posts/:id', requireAuth, controller.deletePost);
 
 // Actions
+
+// Team
+router.get('/team', requireAuth, controller.getTeamMembers);
+router.post('/team/invite', requireAuth, controller.inviteTeamMember);
+router.delete('/team/:id', requireAuth, controller.removeTeamMember);
 router.post('/trigger-post', requireAuth, validate(triggerPostSchema), controller.triggerPost);
 router.post('/seed', requireAuth, controller.seedData);
 

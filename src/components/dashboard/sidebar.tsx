@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Linkedin, Settings, Workflow, LogOut, Sparkles, Layers, Calendar, FileText } from "lucide-react";
+import { LayoutDashboard, Linkedin, Settings, Workflow, LogOut, Sparkles, Layers, Calendar, FileText, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signout } from "@/lib/supabase/actions";
 import { useState } from "react";
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/linkedin", label: "LinkedIn Automation", icon: Linkedin },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/automation", label: "Control Center", icon: Workflow },
   { href: "/logs", label: "System Logs", icon: FileText },
   { href: "/integrations", label: "Integrations", icon: Layers },
@@ -27,7 +28,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 border-r border-border bg-card hidden md:flex flex-col h-screen sticky top-0">
+    <aside className="w-64 border-r border-border bg-card hidden md:flex flex-col h-screen sticky top-0" suppressHydrationWarning>
       <div className="p-6 flex items-center gap-2 border-b border-border/50">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
              <Sparkles className="h-4 w-4 text-primary-foreground" />
@@ -71,20 +72,20 @@ export function Sidebar() {
       
       <div className="p-4 border-t border-border/50 bg-secondary/10">
          <div className="flex items-center gap-3 mb-4 px-2">
-            <div 
-           variant="ghost" 
-           size="sm" 
-           className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-           onClick={handleSignOut}
-           disabled={isSigningOut}
-         >
-            <LogOut className="mr-2 h-4 w-4" /> {isSigningOut ? "Signing Out..." : "Sign Out"}
+            <div className="h-8 w-8 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">KA</div>
+            <div className="overflow-hidden">
                <p className="text-sm font-medium truncate">Krishil Agrawal</p>
                <p className="text-xs text-muted-foreground truncate">Enterprise Plan</p>
             </div>
          </div>
-         <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10">
-            <LogOut className="mr-2 h-4 w-4" /> Sign Out
+         <Button 
+            variant="ghost" 
+            size="sm" 
+            className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+         >
+            <LogOut className="mr-2 h-4 w-4" /> {isSigningOut ? "Signing Out..." : "Sign Out"}
          </Button>
       </div>
     </aside>

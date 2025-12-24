@@ -1,4 +1,10 @@
-import { useRef } from "react";
+"use client";
+import { useState, useEffect } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ArrowUpRight, CheckCircle2, Clock, Users, Activity, ExternalLink, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { fetcher } from "@/lib/api-client";
+import { toast } from "sonner";
 import { AnalyticsView } from "@/components/dashboard/analytics-view";
 
 export default function DashboardPage() {

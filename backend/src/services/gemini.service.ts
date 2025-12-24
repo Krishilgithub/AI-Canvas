@@ -55,6 +55,36 @@ export class GeminiService {
   }
 
   async generateDraft(topic: string, context: string) {
+      // 1. Check for n8n Webhook Override
+      if (process.env.N8N_WEBHOOK_URL) {
+          try {
+              const axios = require('axios');
+              console.log("🔗 Delegating draft generation to n8n workflow...");
+              
+              // We use POST to send adequate context.
+              // If the user strictly needs GET parameters (less recommended for long text), they'd need to change this.
+              const response = await axios.post(process.env.N8N_WEBHOOK_URL, {
+                  topic,
+                  context,
+                  platform: 'linkedin',
+                  action: 'generate_draft'
+              });
+
+              // Expecting { "content": "..." } from n8n
+              if (response.data && response.data.content) {
+                  return response.data.content;
+              }
+              // Fallback if n8n returns just text or different structure
+              if (typeof response.data === 'string') return response.data;
+              return JSON.stringify(response.data);
+
+          } catch (error: any) {
+              console.error("❌ n8n Workflow Error:", error.message);
+              return `[Error] Failed to generate via n8n. Falling back to internal AI.`;
+          }
+      }
+
+      // 2. Fallback to Internal Gemini
       if (!this.model) return `[Mock Draft] Insights on ${topic}. ${context}`;
       
       try {

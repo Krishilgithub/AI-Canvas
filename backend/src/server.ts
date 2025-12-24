@@ -14,17 +14,30 @@ dotenv.config();
 // Start Scheduler
 schedulerService.start();
 
+import http from 'http';
+import { socketService } from './services/socket.service';
+
+// ... imports remain the same
+
+// Start Scheduler
+schedulerService.start();
+
 const app = express();
+const server = http.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: FRONTEND_URL,
   credentials: true
 }));
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
+
+// Initialize Socket.IO
+socketService.init(server, FRONTEND_URL);
 
 // Routes
 app.use('/api/v1/automation', automationRoutes);
@@ -38,8 +51,8 @@ app.get('/health', (req, res) => {
 // Global Error Handler
 app.use(errorHandler);
 
-// Start Server
-app.listen(PORT, () => {
+// Start Server (Listen on HTTP Server, not just Express App)
+server.listen(PORT, () => {
   console.log(`🚀 Backend Server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
 });

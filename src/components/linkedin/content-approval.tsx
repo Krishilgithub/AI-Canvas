@@ -210,6 +210,16 @@ export function ContentApproval() {
                         ) : (
                             content
                         )}
+                        
+                        {/* Media Display */}
+                        {activePost.media_urls && activePost.media_urls.length > 0 && (
+                            <div className="mt-4 grid gap-2 grid-cols-1 sm:grid-cols-2">
+                                {/* @ts-ignore */}
+                                {activePost.media_urls.map((url: string, i: number) => (
+                                    <img key={i} src={url} alt="Media" className="rounded-lg border object-cover w-full h-auto max-h-[300px]" />
+                                ))}
+                            </div>
+                        )}
                      </div>
 
                      {/* Mock Footer Actions */}

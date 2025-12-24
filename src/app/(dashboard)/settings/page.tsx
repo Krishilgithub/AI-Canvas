@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { TeamManagement } from "@/components/settings/team-management";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<any>({ 
@@ -111,38 +112,44 @@ export default function SettingsPage() {
               </div>
            </CardContent>
        </Card>
-       
+
        <Card>
           <CardHeader>
-             <CardTitle>Notification Preferences</CardTitle>
-             <CardDescription>Control when and how you receive alerts.</CardDescription>
+             <CardTitle>Team Collaboration</CardTitle>
+             <CardDescription>Manage workspace members and permissions.</CardDescription>
           </CardHeader>
           <CardContent>
-             <div className="space-y-6">
-                 {[
-                    { id: "weekly_digest", label: "Weekly Digest", desc: "Summary of engagement and growth stats" },
-                    { id: "post_approval", label: "Post Approval Needed", desc: "When AI has generated a new draft" },
-                    { id: "trend_alert", label: "New Trend Detected", desc: "High velocity trend in your niche" },
-                    { id: "security_alert", label: "Security Alerts", desc: "Login attempts from new devices" }
-                 ].map((n) => (
-                    <div key={n.id} className="flex items-center justify-between pb-4 border-b last:border-0 last:pb-0">
-                       <div>
-                          <p className="font-medium">{n.label}</p>
-                          <p className="text-sm text-muted-foreground">{n.desc}</p>
-                       </div>
+             <TeamManagement />
+          </CardContent>
+       </Card>
+
+       <Card>
+          <CardHeader>
+             <CardTitle>Account Notifications</CardTitle>
+             <CardDescription>Control what alerts you receive via email.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+               {Object.entries({
+                   weekly_digest: "Weekly AI Performance Digest",
+                   post_approval: "Ready for Approval Alerts",
+                   trend_alert: "New Trend Opportunities",
+                   security_alert: "Security Alerts"
+               }).map(([key, label]) => (
+                   <div key={key} className="flex items-center justify-between py-2 border-b last:border-0 border-border/50">
+                       <Label htmlFor={key} className="flex-1 cursor-pointer">{label}</Label>
                        <Switch 
-                          checked={profile.notification_preferences?.[n.id] ?? false}
-                          onCheckedChange={(checked) => setProfile({
-                              ...profile,
-                              notification_preferences: {
-                                  ...profile.notification_preferences,
-                                  [n.id]: checked
-                              }
-                          })}
+                           id={key}
+                           checked={(profile.notification_preferences as any)[key]}
+                           onCheckedChange={(checked) => setProfile({
+                               ...profile,
+                               notification_preferences: {
+                                   ...profile.notification_preferences,
+                                   [key]: checked
+                               }
+                           })}
                        />
-                    </div>
-                 ))}
-             </div>
+                   </div>
+               ))}
           </CardContent>
        </Card>
     </div>

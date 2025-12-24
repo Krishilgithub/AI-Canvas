@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 
-export const API_BASE = 'http://localhost:4000/api/v1/automation';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1/automation';
 
 async function getHeaders() {
    const supabase = createClient();
@@ -22,7 +22,12 @@ export async function fetcher(url: string) {
    const res = await fetch(`${API_BASE}${url}`, { headers });
    
    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
+      let error: any = {};
+      try {
+         error = await res.json();
+      } catch (e) {
+         error = { error: await res.text() };
+      }
       console.error(`[API Fetcher Error] ${url}:`, error);
       throw new Error(error.error || 'API Error');
    }
@@ -38,7 +43,12 @@ export async function poster(url: string, body: any = {}) {
    });
    
    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
+      let error: any = {};
+      try {
+         error = await res.json();
+      } catch (e) {
+         error = { error: await res.text() };
+      }
       console.error(`[API Poster Error] ${url}:`, error);
       throw new Error(error.error || 'API Error');
    }
