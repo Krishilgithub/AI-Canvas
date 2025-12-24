@@ -1,8 +1,62 @@
+"use client";
+import { useState, useEffect } from 'react';
+import { fetcher, poster } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
+  const [profile, setProfile] = useState<any>({ 
+      full_name: '', 
+      email: '', 
+      bio: '', 
+      notification_preferences: {
+          weekly_digest: true,
+          post_approval: true,
+          trend_alert: false,
+          security_alert: true
+      }
+  });
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const data = await fetcher('/profile');
+        setProfile({
+            ...data,
+            notification_preferences: data.notification_preferences || {
+                weekly_digest: true,
+                post_approval: true,
+                trend_alert: false,
+                security_alert: true
+            }
+        });
+      } catch (error: any) {
+        toast.error("Failed to load profile.", { description: error.message || 'Unknown error' });
+      }
+    };
+    loadProfile();
+  }, []);
+
+  const handleSaveProfile = async () => {
+    try {
+      await poster('/profile', profile);
+      toast.success("Profile updated successfully!");
+    } catch (error: any) {
+      toast.error("Failed to update profile.", { description: error.message || 'Unknown error' });
+    }
+  };
+
+  /* Placeholder for future notification settings
+  const handleToggleNotification = async (id: string, checked: boolean) => {
+     // Implementation when backend supports notifications
+  };
+  */
+
   return (
     <div className="max-w-4xl space-y-8 animate-in fade-in duration-500">
        <div>
@@ -25,29 +79,37 @@ export default function SettingsPage() {
              </div>
              
              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                   <label className="text-sm font-medium">Full Name</label>
-                   <Input defaultValue="Krishil Agrawal" />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-sm font-medium">Email Address</label>
-                   <Input defaultValue="krishil@example.com" disabled />
-                </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input 
+                        id="name" 
+                        value={profile.full_name || ''} 
+                        onChange={(e) => setProfile({...profile, full_name: e.target.value})} 
+                        placeholder="Your Name" 
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input id="email" value={profile.email || ''} disabled className="opacity-70 bg-secondary" />
+                 </div>
              </div>
              
              <div className="space-y-2">
-                <label className="text-sm font-medium">Professional Bio</label>
-                <textarea 
-                   className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y" 
-                   defaultValue="SaaS Founder building AI automation tools. Passionate about scaling startups and engineering leadership." 
+                <Label htmlFor="bio">Professional Bio</Label>
+                <Textarea 
+                   id="bio" 
+                   value={profile.bio || ''} 
+                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setProfile({...profile, bio: e.target.value})}
+                   placeholder="SaaS Founder building AI automation tools. Passionate about scaling startups and engineering leadership." 
+                   rows={4} 
                 />
                 <p className="text-xs text-muted-foreground">This bio is used by the AI to align content with your personal brand.</p>
              </div>
              
-             <div className="flex justify-end">
-                <Button>Save Changes</Button>
-             </div>
-          </CardContent>
+              <div className="flex justify-end">
+                 <Button onClick={handleSaveProfile}>Save Changes</Button>
+              </div>
+           </CardContent>
        </Card>
        
        <Card>
@@ -57,23 +119,29 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
              <div className="space-y-6">
-                {[
-                   { label: "Weekly Digest", desc: "Summary of engagement and growth stats" },
-                   { label: "Post Approval Needed", desc: "When AI has generated a new draft" },
-                   { label: "New Trend Detected", desc: "High velocity trend in your niche" },
-                   { label: "Security Alerts", desc: "Login attempts from new devices" }
-                ].map((n, i) => (
-                   <div key={i} className="flex items-center justify-between pb-4 border-b last:border-0 last:pb-0">
-                      <div>
-                         <p className="font-medium">{n.label}</p>
-                         <p className="text-sm text-muted-foreground">{n.desc}</p>
-                      </div>
-                      <div className="relative inline-block w-11 h-6 cursor-pointer">
-                           <input type="checkbox" className="peer sr-only" defaultChecked={i !== 3} />
-                           <div className="w-11 h-6 bg-secondary/50 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                      </div>
-                   </div>
-                ))}
+                 {[
+                    { id: "weekly_digest", label: "Weekly Digest", desc: "Summary of engagement and growth stats" },
+                    { id: "post_approval", label: "Post Approval Needed", desc: "When AI has generated a new draft" },
+                    { id: "trend_alert", label: "New Trend Detected", desc: "High velocity trend in your niche" },
+                    { id: "security_alert", label: "Security Alerts", desc: "Login attempts from new devices" }
+                 ].map((n) => (
+                    <div key={n.id} className="flex items-center justify-between pb-4 border-b last:border-0 last:pb-0">
+                       <div>
+                          <p className="font-medium">{n.label}</p>
+                          <p className="text-sm text-muted-foreground">{n.desc}</p>
+                       </div>
+                       <Switch 
+                          checked={profile.notification_preferences?.[n.id] ?? false}
+                          onCheckedChange={(checked) => setProfile({
+                              ...profile,
+                              notification_preferences: {
+                                  ...profile.notification_preferences,
+                                  [n.id]: checked
+                              }
+                          })}
+                       />
+                    </div>
+                 ))}
              </div>
           </CardContent>
        </Card>

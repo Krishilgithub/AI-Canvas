@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../middleware/auth.middleware';
 import { supabase } from '../db';
 import { linkedInService } from '../services/linkedin.service';
 import { newsService } from '../services/news.service';
@@ -8,12 +9,15 @@ import { mockStore } from '../store';
 
 export class AutomationController {
   
-  private useMockDb = process.env.SUPABASE_URL?.includes('placeholder');
+  private useMockDb = process.env.USE_MOCK_DB === 'true' || process.env.SUPABASE_URL?.includes('placeholder');
 
   // 1. Save Configuration
-  async saveConfig(req: Request, res: Response) {
+  saveConfig = async (req: AuthRequest, res: Response) => {
     try {
-      const { user_id, niches, keywords, tone_profile, schedule_cron, require_approval } = req.body;
+      const user_id = req.user?.id;
+      const { niches, keywords, tone_profile, schedule_cron, require_approval } = req.body;
+
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       if (this.useMockDb) {
          const existingIndex = mockStore.configs.findIndex(c => c.user_id === user_id);
@@ -48,16 +52,17 @@ export class AutomationController {
   }
 
   // 2. Ingest Trends (from n8n)
-  async ingestTrend(req: Request, res: Response) {
+  ingestTrend = async (req: Request, res: Response) => {
     // ... (Keep existing implementation or add mock fallback if needed)
     // For brevity, assuming this is mostly n8n usage
     res.json({ success: true });
   }
 
   // NEW: Scan Real Trends
-  async scanTrends(req: Request, res: Response) {
+  scanTrends = async (req: AuthRequest, res: Response) => {
       try {
-          const { user_id } = req.body;
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
           
           let niches = ['Technology', 'Business'];
 
@@ -90,27 +95,21 @@ export class AutomationController {
           // 4. Save
           const savedTrends = [];
           for (const trend of analyzedTrends) {
-               const trendObj = {
+               const trendObj: any = {
                    topic: trend.title,
                    category: trend.category || 'General',
                    velocity_score: trend.velocity_score,
                    source: 'newsdata_io',
                    metadata: { link: trend.link, insight: trend.insight },
-                   created_at: new Date().toISOString(),
-                   id: Math.random().toString(36).substr(2, 9)
+                   created_at: new Date().toISOString()
                };
 
                if (this.useMockDb) {
+                   trendObj.id = Math.random().toString(36).substr(2, 9);
                    mockStore.trends.unshift(trendObj);
                    savedTrends.push(trendObj);
                } else {
-                   const { data } = await supabase.from('detected_trends').insert({
-                       topic: trendObj.topic,
-                       category: trendObj.category,
-                       velocity_score: trendObj.velocity_score,
-                       source: trendObj.source,
-                       metadata: trendObj.metadata
-                   }).select().single();
+                   const { data } = await supabase.from('detected_trends').insert(trendObj).select().single();
                    if(data) savedTrends.push(data);
                }
           }
@@ -120,16 +119,16 @@ export class AutomationController {
               if (trend.velocity_score > 70) {
                    const draftContent = await geminiService.generateDraft(trend.topic, trend.metadata.insight);
                    
-                   const postObj = {
+                   const postObj: any = {
                        user_id,
                        content: draftContent,
                        trend_id: trend.id,
                        status: PostStatus.NEEDS_APPROVAL,
-                       created_at: new Date().toISOString(),
-                       id: Math.random().toString(36).substr(2, 9)
+                       created_at: new Date().toISOString()
                    };
 
                    if (this.useMockDb) {
+                       postObj.id = Math.random().toString(36).substr(2, 9);
                        mockStore.posts.unshift(postObj);
                    } else {
                        await supabase.from('generated_posts').insert(postObj);
@@ -146,15 +145,32 @@ export class AutomationController {
   }
 
   // 3. Create Draft Post (from n8n AI Agent)
-  async createDraft(req: Request, res: Response) {
+  createDraft = async (req: AuthRequest, res: Response) => {
     try {
-      const { user_id, content, trend_id } = req.body;
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
       
+      let { content, trend_id } = req.body;
+      
+      // Auto-generate if missing
+      if (!content) {
+          if (this.useMockDb) {
+             content = `[AI Generated] Draft for trend ${trend_id}. Typically this would be generated by Gemini based on the trend analysis.`;
+          } else {
+             const { data: trend } = await supabase.from('detected_trends').select('*').eq('id', trend_id).single();
+             if (trend) {
+                 content = await geminiService.generateDraft(trend.topic, trend.metadata?.insight || 'No context');
+             } else {
+                 content = "Draft generated from unknown trend.";
+             }
+          }
+      }
+
       if (this.useMockDb) {
           const post = {
               id: Math.random().toString(36).substr(2, 9),
               user_id, content, trend_id, 
-              status: PostStatus.SCHEDULED,
+              status: PostStatus.NEEDS_APPROVAL,
               created_at: new Date().toISOString()
           };
           mockStore.posts.unshift(post);
@@ -169,7 +185,8 @@ export class AutomationController {
         .eq('platform', Platform.LINKEDIN)
         .single();
         
-      const status = config?.require_approval ? PostStatus.NEEDS_APPROVAL : PostStatus.SCHEDULED;
+      // Default to NEEDS_APPROVAL for safety if config is missing
+      const status = (config?.require_approval !== false) ? PostStatus.NEEDS_APPROVAL : PostStatus.SCHEDULED;
       
       const { data, error } = await supabase
         .from('generated_posts')
@@ -201,9 +218,12 @@ export class AutomationController {
   }
 
   // 4. Trigger Posting (Webhook or User Action)
-  async triggerPost(req: Request, res: Response) {
+  triggerPost = async (req: AuthRequest, res: Response) => {
     try {
-      const { post_id, user_id } = req.body;
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      const { post_id } = req.body;
       
       if (this.useMockDb) {
           const postIndex = mockStore.posts.findIndex(p => p.id === post_id);
@@ -219,14 +239,15 @@ export class AutomationController {
           return res.json({ success: true, platform_response: result });
       }
 
-      // Fetch post
+      // Fetch post ensuring it belongs to user
       const { data: post, error: fetchError } = await supabase
         .from('generated_posts')
         .select('*')
         .eq('id', post_id)
+        .eq('user_id', user_id) 
         .single();
 
-      if (fetchError || !post) throw new Error("Post not found");
+      if (fetchError || !post) throw new Error("Post not found or unauthorized");
       
       if (post.status !== PostStatus.APPROVED && post.status !== PostStatus.SCHEDULED && post.status !== PostStatus.NEEDS_APPROVAL) {
          return res.status(400).json({ error: "Post is not approved for publishing" });
@@ -271,70 +292,431 @@ export class AutomationController {
     }
   }
 
+  // 5. Update Post (Edit Draft)
+  updatePost = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      const { id } = req.params;
+      const { content, scheduled_time } = req.body;
+
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      if (this.useMockDb) {
+         // Mock update
+         const post = mockStore.posts.find(p => p.id === id);
+         if (post) {
+            if (content) post.content = content;
+            if (scheduled_time) post.scheduled_time = scheduled_time;
+         }
+         return res.json({ success: true, post });
+      }
+
+      // Real update
+      const { data, error } = await supabase
+        .from('generated_posts')
+        .update({ content, scheduled_time, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', user_id) // Security check
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ success: true, post: data });
+
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
+  // 6. Create Post (Manual)
+  createPost = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          console.log(`[CREATE_POST] Attempting to create for User ID: ${user_id}`);
+          const { content, scheduled_time, status, trend_id } = req.body;
+
+          if (this.useMockDb) {
+              console.log('[CREATE_POST] Using Mock DB');
+              const post = {
+                  id: Math.random().toString(36).substr(2, 9),
+                  user_id, content, scheduled_time, status, trend_id,
+                  created_at: new Date().toISOString()
+              };
+              mockStore.posts.unshift(post);
+              return res.json({ success: true, post });
+          }
+
+          console.log('[CREATE_POST] Inserting into Real DB...');
+          const { data, error } = await supabase
+              .from('generated_posts')
+              .insert({
+                  user_id,
+                  content,
+                  scheduled_time,
+                  status,
+                  trend_id
+              })
+              .select()
+              .single();
+
+          if (error) {
+             console.error('[CREATE_POST] DB Error:', error);
+             throw error;
+          }
+          res.json({ success: true, post: data });
+
+      } catch (e: any) {
+          console.error('[CREATE_POST] Exception:', e);
+          res.status(500).json({ error: e.message });
+      }
+  }
+
+  // 7. Delete Post
+  deletePost = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          const { id } = req.params;
+
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          if (this.useMockDb) {
+              const index = mockStore.posts.findIndex(p => p.id === id);
+              if (index >= 0) mockStore.posts.splice(index, 1);
+              return res.json({ success: true });
+          }
+
+          const { error } = await supabase
+              .from('generated_posts')
+              .delete()
+              .eq('id', id)
+              .eq('user_id', user_id); // Security check
+
+          if (error) throw error;
+          res.json({ success: true });
+
+      } catch (e: any) {
+          res.status(500).json({ error: e.message });
+      }
+  }
+
+  // 8. Get Analytics
+  getAnalytics = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          const { days = 30 } = req.query;
+          const limit = parseInt(days as string) || 30;
+
+          if (this.useMockDb) {
+              return res.json({
+                  data: Array.from({ length: limit }, (_, i) => {
+                      const d = new Date();
+                      d.setDate(d.getDate() - (limit - i - 1));
+                      return {
+                          date: d.toISOString().split('T')[0],
+                          impressions: Math.floor(Math.random() * 1000) + 100,
+                          clicks: Math.floor(Math.random() * 100) + 10,
+                          engagement: Math.floor(Math.random() * 50) + 5
+                      };
+                  })
+              });
+          }
+
+          const startDate = new Date();
+          startDate.setDate(startDate.getDate() - limit);
+          
+          // Aggregate by date (in case multiple accounts)
+          // Since Supabase doesn't do 'group by' easily via JS client without RPC sometimes, 
+          // we fetch all rows and aggregate in JS for MVP.
+          const { data, error } = await supabase
+             .from('analytics_daily')
+             .select('date, impressions, clicks, likes, comments, shares')
+             .eq('user_id', user_id)
+             .gte('date', startDate.toISOString().split('T')[0])
+             .order('date', { ascending: true });
+
+          if (error) {
+              console.error("Analytics fetch error:", error);
+              // Handle "relation does not exist" gracefully if migration missing
+              if (error.code === '42P01') {
+                  const d = new Date().toISOString().split('T')[0];
+                  return res.json({ data: [] }); 
+              }
+              throw error;
+          }
+
+          // Aggregate by date
+          const aggregated: Record<string, any> = {};
+          data?.forEach((row: any) => {
+              if (!aggregated[row.date]) {
+                  aggregated[row.date] = { date: row.date, impressions: 0, clicks: 0, engagement: 0 };
+              }
+              aggregated[row.date].impressions += (row.impressions || 0);
+              aggregated[row.date].clicks += (row.clicks || 0);
+              aggregated[row.date].engagement += (row.likes + row.comments + row.shares || 0);
+          });
+
+          const result = Object.values(aggregated).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          
+          res.json({ data: result });
+
+      } catch (e: any) {
+          console.error("getAnalytics Error:", e);
+          res.status(500).json({ error: e.message });
+      }
+  }
+
   // --- GETTERS for Frontend ---
 
-  async getConfig(req: Request, res: Response) {
+  getConfig = async (req: AuthRequest, res: Response) => {
     try {
-      // In real app, valid user_id from JWT. For now, pass via Query or Header
-      const { user_id } = req.query; 
-      if (!user_id) return res.status(400).json({ error: "Missing user_id" });
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       if (this.useMockDb) {
             const conf = mockStore.configs.find(c => c.user_id === user_id);
             return res.json(conf || {});
         }
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('automation_configs')
         .select('*')
         .eq('user_id', user_id)
         .eq('platform', Platform.LINKEDIN)
         .single();
       
-      if (error) throw error;
       res.json(data || {}); 
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   }
 
-  async getTrends(req: Request, res: Response) {
+   getTrends = async (req: Request, res: Response) => {
     try {
+       const page = parseInt(req.query.page as string) || 1;
+       const limit = parseInt(req.query.limit as string) || 20;
+       const offset = (page - 1) * limit;
+
        if (this.useMockDb) {
-           return res.json(mockStore.trends);
+           return res.json({
+               data: mockStore.trends.slice(offset, offset + limit),
+               meta: { page, limit, total: mockStore.trends.length } 
+           });
        }
 
-       const { data, error } = await supabase
-        .from('detected_trends')
-        .select('*')
-        .order('velocity_score', { ascending: false })
-        .limit(20);
+       const { category } = req.query;
+       
+        let query = supabase.from('detected_trends').select('*', { count: 'exact' });
+       
+        if (category && category !== 'All') {
+           // @ts-ignore
+           query = query.eq('category', category as string);
+        }
+       
+        const { data, count, error } = await query
+         .order('velocity_score', { ascending: false })
+         .range(offset, offset + limit - 1);
         
-       if (error) throw error;
-       res.json(data);
+       if (error) {
+           console.error("❌ getTrends Supabase Error:", error);
+           throw error;
+       }
+       res.json({ data, meta: { page, limit, total: count } });
+    } catch(e: any) { 
+         console.error("❌ getTrends Exception:", e);
+         res.status(500).json({ error: e.message, details: e }); 
+    }
+  }
+
+  getPosts = async (req: AuthRequest, res: Response) => {
+    try {
+        const user_id = req.user?.id;
+        if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = (page - 1) * limit;
+        const { status } = req.query;
+
+        if (this.useMockDb) {
+            let posts = mockStore.posts;
+            if (status) posts = posts.filter(p => p.status === status);
+            return res.json({
+                data: posts.slice(offset, offset + limit),
+                meta: { page, limit, total: posts.length }
+            });
+        }
+
+        let query = supabase.from('generated_posts').select('*', { count: 'exact' });
+        
+        // Filters
+        query = query.eq('user_id', user_id);
+        if (status) query = query.eq('status', status);
+        
+        // Sorting & Pagination
+        query = query.order('created_at', { ascending: false })
+                     .range(offset, offset + limit - 1);
+        
+        const { data, count, error } = await query;
+
+        if (error) throw error;
+        res.json({ data, meta: { page, limit, total: count } });
     } catch(e: any) { res.status(500).json({ error: e.message }); }
   }
 
-  async getPosts(req: Request, res: Response) {
+  // --- ANALYTICS ---
+  getDashboardStats = async (req: AuthRequest, res: Response) => {
     try {
-        if (this.useMockDb) {
-            return res.json(mockStore.posts);
-        }
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-        const { user_id, status } = req.query;
-        let query = supabase.from('generated_posts').select('*').order('created_at', { ascending: false });
-        
-        if (user_id) query = query.eq('user_id', user_id);
-        if (status) query = query.eq('status', status);
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        res.json(data);
-    } catch(e: any) { res.status(500).json({ error: e.message }); }
+      if (this.useMockDb) {
+         return res.json({
+            total_reach: "12.5k",
+            engagement_rate: "4.2%",
+            pending_approvals: 5,
+            published_this_week: 12
+         });
+      }
+
+      // 1. Pending Approvals
+      const { count: pendingCount } = await supabase
+        .from('generated_posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user_id)
+        .eq('status', 'needs_approval');
+
+      // 2. Published This Week
+      const startOfWeek = new Date();
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      
+      const { count: publishedCount } = await supabase
+        .from('generated_posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user_id)
+        .eq('status', 'published')
+        .gte('published_at', startOfWeek.toISOString());
+
+      // 3. Activity Feed (Recent Posts)
+      const { data: recentActivity } = await supabase
+        .from('generated_posts')
+        .select('id, content, status, platform_post_id, created_at, trend_id')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      res.json({
+        metrics: {
+           total_reach: "0", // Placeholder until real LinkedIn analytics
+           engagement_rate: "0%", // Placeholder
+           pending_approvals: pendingCount || 0,
+           published_this_week: publishedCount || 0
+        },
+        activity: recentActivity || []
+      });
+
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
+  // --- LOGS ---
+  getLogs = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+      
+      if (this.useMockDb) {
+          // Return mock logs
+          return res.json([
+             { id: '1', action: 'Scan Trends', level: 'info', message: 'Scanned 15 news articles', created_at: new Date().toISOString() },
+             { id: '2', action: 'Generate Draft', level: 'success', message: 'Created draft for "AI Ethics"', created_at: new Date(Date.now() - 3600000).toISOString() }
+          ]);
+      }
+
+      const { data, error } = await supabase
+        .from('automation_logs')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      res.json(data);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+  }
+
+  // --- PROFILE ---
+  getProfile = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          const { data, error } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user_id)
+              .single();
+          
+          if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows", which is fine for new users
+          
+          res.json(data || {});
+      } catch(e: any) { res.status(500).json({ error: e.message }); }
+  }
+
+  updateProfile = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          const { full_name, avatar_url, bio } = req.body;
+
+          const { data, error } = await supabase
+              .from('profiles')
+              .upsert({
+                  id: user_id,
+                  email: req.user.email, // Ensure email is synced from auth
+                  full_name,
+                  avatar_url,
+                  updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+          if (error) throw error;
+          res.json({ success: true, profile: data });
+      } catch(e: any) { res.status(500).json({ error: e.message }); }
+  }
+
+  // --- CONNECTIONS ---
+  getConnections = async (req: AuthRequest, res: Response) => {
+      try {
+          const user_id = req.user?.id;
+          if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+          if (this.useMockDb) {
+              return res.json([
+                  { platform: 'linkedin', connected: true, username: 'Mock User' },
+                  { platform: 'slack', connected: false }
+              ]);
+          }
+
+          const { data } = await supabase
+              .from('linked_accounts')
+              .select('platform, platform_username, status')
+              .eq('user_id', user_id);
+
+          res.json(data || []);
+      } catch(e: any) { res.status(500).json({ error: e.message }); }
   }
 
   // --- DEV TOOLS ---
-  async seedData(req: Request, res: Response) {
+  seedData = async (req: Request, res: Response) => {
      try {
         if (process.env.NEWSDATA_API_KEY) {
             return this.scanTrends(req, res);

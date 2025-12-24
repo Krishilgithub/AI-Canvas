@@ -1,9 +1,12 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { fetcher } from "@/lib/api-client";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, AlertCircle, Clock, Activity } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { CheckCircle2, AlertTriangle, AlertCircle, Info, Filter, Download, Clock, Activity } from "lucide-react";
 
 interface LogEntry {
   id: string;
@@ -14,30 +17,29 @@ interface LogEntry {
   metadata?: any;
 }
 
-export default function AutomationLogsPage() {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+export default function LogsPage() {
+  const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // In a real app, fetch from backend via Supabase client
-  // const { data } = await supabase.from('automation_logs').select('*')...
   useEffect(() => {
-    // Mock Data for Display
-    const mockLogs: LogEntry[] = [
-       { id: '1', action: 'trigger_post', level: 'success', message: 'Successfully published post to LinkedIn.', created_at: new Date().toISOString() },
-       { id: '2', action: 'draft_created', level: 'info', message: 'Generated draft from trend "SaaS Pricing".', created_at: new Date(Date.now() - 3600000).toISOString() },
-       { id: '3', action: 'trend_ingest', level: 'info', message: 'Ingested 5 new trends from n8n scraper.', created_at: new Date(Date.now() - 7200000).toISOString() },
-       { id: '4', action: 'api_error', level: 'error', message: 'Rate limit exceeded for LinkedIn API.', created_at: new Date(Date.now() - 86400000).toISOString() },
-    ];
-    setLogs(mockLogs);
-    setLoading(false);
+     fetcher('/logs')
+       .then(data => {
+          setLogs(Array.isArray(data) ? data : []);
+          setLoading(false);
+       })
+       .catch(err => {
+         console.error("Logs error:", err);
+         toast.error("Failed to fetch logs");
+         setLoading(false);
+       });
   }, []);
 
-  const getStatusIcon = (level: string) => {
+  const getIcon = (level: string) => {
     switch (level) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'error': return <AlertCircle className="h-4 w-4 text-destructive" />;
-      case 'warning': return <AlertCircle className="h-4 w-4 text-amber-500" />;
-      default: return <Clock className="h-4 w-4 text-blue-500" />;
+      case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      default: return <Info className="h-4 w-4 text-blue-500" />;
     }
   };
 
@@ -87,27 +89,31 @@ export default function AutomationLogsPage() {
              <CardDescription>Real-time log stream from the automation engine.</CardDescription>
           </CardHeader>
           <CardContent>
-             <ScrollArea className="h-[500px] w-full rounded-md border p-4">
+              <div className="h-[500px] w-full rounded-md border p-4 overflow-y-auto">
                 <div className="space-y-4">
+                   {loading && <div className="text-center py-8">Loading logs...</div>}
+                   {!loading && logs.length === 0 && <div className="text-center py-8 text-muted-foreground">No logs found</div>}
                    {logs.map((log) => (
-                      <div key={log.id} className="flex items-start justify-between border-b pb-4 last:border-0 last:pb-0">
-                         <div className="flex items-start gap-4">
-                            <div className="mt-1">{getStatusIcon(log.level)}</div>
-                            <div className="space-y-1">
-                               <p className="text-sm font-medium leading-none">{log.message}</p>
-                               <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[10px] uppercase">{log.action}</Badge>
-                                  <span className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</span>
+                      <div key={log.id} className="flex items-start justify-between p-4 border rounded-lg bg-card/50 hover:bg-card transition-colors">
+                         <div className="flex gap-4">
+                            <div className="mt-1">
+                               {getIcon(log.level)}
+                            </div>
+                            <div>
+                               <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-sm">{log.action || 'System Action'}</h4>
+                                  <Badge variant="outline" className="text-[10px] uppercase">{log.level}</Badge>
                                </div>
+                               <p className="text-sm text-muted-foreground">{log.message}</p>
                             </div>
                          </div>
-                         <Badge variant={log.level === 'error' ? 'destructive' : 'secondary'} className="capitalize">
-                            {log.level}
-                         </Badge>
+                         <div className="text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(log.created_at).toLocaleString()}
+                         </div>
                       </div>
                    ))}
                 </div>
-             </ScrollArea>
+              </div>
           </CardContent>
        </Card>
     </div>

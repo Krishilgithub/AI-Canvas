@@ -1,6 +1,6 @@
-"use client";
 
 import { useState, useEffect } from "react";
+import { fetcher, poster } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -20,8 +20,7 @@ export function ConfigurationPanel() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-     fetch('http://localhost:4000/api/v1/automation/config?user_id=test-user-123')
-        .then(res => res.json())
+     fetcher('/config')
         .then(data => {
            if (data && data.niches) setConfig(data);
            setLoading(false);
@@ -32,11 +31,7 @@ export function ConfigurationPanel() {
 
   const saveConfig = async () => {
      try {
-        await fetch('http://localhost:4000/api/v1/automation/config', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ ...config, user_id: 'test-user-123' })
-        });
+        await poster('/config', config);
         toast.success("Configuration saved successfully", { description: "Your AI agent will use these new settings." });
      } catch(e) { 
         console.error(e); 

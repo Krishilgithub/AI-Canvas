@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { fetcher, poster, puter } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { Check, X, RefreshCw, Edit3, Calendar, MoreHorizontal, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { Check, X, RefreshCw, Edit3, Calendar, MoreHorizontal, ChevronLeft, ChevronRight, Image as ImageIcon, Zap, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -12,27 +13,31 @@ export function ContentApproval() {
   const [drafts, setDrafts] = useState<any[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [content, setContent] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Fetch Drafts
   const fetchDrafts = () => {
-    fetch('http://localhost:4000/api/v1/automation/posts?user_id=test-user-123')
-      .then(res => res.json())
-      .then(data => {
-         setDrafts(Array.isArray(data) ? data : []);
-         if (data.length > 0 && !selectedPostId) {
-            setSelectedPostId(data[0].id);
-            setContent(data[0].content);
+    fetcher(`/posts?status=needs_approval&page=${page}&limit=10`)
+      .then(res => {
+         const list = res.data || res;
+         setDrafts(Array.isArray(list) ? list : []);
+         if (res.meta) setTotalPages(Math.ceil(res.meta.total / res.meta.limit));
+         
+         if (list.length > 0 && !selectedPostId) {
+            setSelectedPostId(list[0].id);
+            setContent(list[0].content);
          }
       })
       .catch(err => {
         console.error("Fetch error:", err);
-        toast.error("Could not fetch drafts", { description: "Is the backend server running?" });
+        toast.error("Could not fetch drafts");
       });
   };
 
   useEffect(() => {
      fetchDrafts();
-  }, []);
+  }, [page]);
 
   useEffect(() => {
      if (selectedPostId) {
@@ -41,17 +46,30 @@ export function ContentApproval() {
      }
   }, [selectedPostId, drafts]);
 
+  // Save Edit
+  const handleSave = async () => {
+      if (!activePost) return;
+      
+      toast.promise(
+          puter(`/posts/${activePost.id}`, { content: content }),
+          {
+              loading: "Saving changes...",
+              success: () => {
+                  fetchDrafts(); // Refresh to get latest state
+                  return "Draft saved successfully";
+              },
+              error: "Failed to save draft"
+          }
+      );
+  };
+
   const activePost = drafts.find(d => d.id === selectedPostId);
 
 
   const handleApprove = async () => {
      if (!activePost) return;
      toast.promise(
-         fetch('http://localhost:4000/api/v1/automation/trigger-post', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ post_id: activePost.id, user_id: activePost.user_id })
-         }).then(() => fetchDrafts()),
+         poster('/trigger-post', { post_id: activePost.id }), // user_id removed, handled by auth
          {
              loading: 'Publishing to LinkedIn...',
              success: 'Post published successfully!',
@@ -95,6 +113,18 @@ export function ContentApproval() {
                 </div>
              </div>
           ))}
+
+           
+           {/* Pagination */}
+           <div className="flex gap-2 justify-center py-2 mt-auto">
+                <Button variant="ghost" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs self-center">Page {page} of {totalPages || 1}</span>
+                <Button variant="ghost" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+           </div>
        </div>
 
        {/* Right: Editor / Preview */}
@@ -109,47 +139,89 @@ export function ContentApproval() {
                  </div>
               </div>
               <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditMode(!editMode)}>
-                     <Edit3 className="h-4 w-4 mr-2" /> {editMode ? "Preview" : "Edit"}
-                  </Button>
+                     {editMode ? (
+                         <div className="flex gap-2">
+                             <Button variant="outline" size="sm" onClick={() => { setEditMode(false); setContent(activePost.content); }}>Cancel</Button>
+                             <Button variant="default" size="sm" onClick={() => { handleSave(); setEditMode(false); }}>Save Changes</Button>
+                         </div>
+                     ) : (
+                         <Button variant="ghost" size="sm" onClick={() => setEditMode(true)}>
+                             <Edit3 className="h-4 w-4 mr-2" />
+                             Edit Content
+                         </Button>
+                     )}
               </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto bg-secondary/5 p-6 md:p-10">
-              <div className="max-w-2xl mx-auto bg-card border shadow-sm rounded-xl overflow-hidden min-h-[400px]">
-                 {/* LinkedIn Mock Header */}
-                 <div className="p-4 border-b flex gap-3">
-                    <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary">KA</div>
-                    <div>
-                        <div className="font-semibold text-sm">Krishil Agrawal</div>
-                        <div className="text-xs text-muted-foreground">Building AI Canvas • Now • <span className="opacity-60">🌐</span></div>
-                    </div>
-                 </div>
-                 
-                 {/* Post Content */}
-                 <div className="p-4 md:p-6 text-sm md:text-base leading-relaxed whitespace-pre-wrap font-sans text-foreground/90">
-                    {editMode ? (
-                        <textarea 
-                           className="w-full h-[300px] bg-transparent resize-none focus:outline-none" 
-                           value={content}
-                           onChange={(e) => setContent(e.target.value)}
-                        />
-                    ) : (
-                        content
-                    )}
-                    
-                    {/* Mock Media Placeholder if needed */}
-                 </div>
 
-                 {/* Mock Footer Actions */}
-                 <div className="border-t bg-secondary/5 px-4 py-3 flex justify-between text-muted-foreground">
-                    <div className="flex gap-4 text-xs font-medium">
-                       <span>Like</span>
-                       <span>Comment</span>
-                       <span>Repost</span>
-                       <span>Send</span>
+          
+          <div className="flex-1 overflow-y-auto bg-secondary/5 p-6 md:p-10">
+              <div className="max-w-2xl mx-auto space-y-4">
+                 {/* Scheduling Controls */}
+                 {editMode && (
+                    <div className="bg-card border p-4 rounded-xl shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2">
+                       <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-primary" /> Scheduling
+                       </h4>
+                       <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                             <label className="text-xs font-medium text-muted-foreground">Publish Date</label>
+                             <input 
+                                type="datetime-local" 
+                                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={activePost.scheduled_time ? new Date(activePost.scheduled_time).toISOString().slice(0, 16) : ""}
+                                onChange={(e) => {
+                                    // Update local state or save immediately? better to save on 'Save Changes'
+                                    // For now, let's update local draft list to reflect change in UI, actual save happens on Save or Schedule
+                                    const newTime = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                    const updatedDrafts = drafts.map(d => d.id === activePost.id ? { ...d, scheduled_time: newTime } : d);
+                                    setDrafts(updatedDrafts);
+                                }}
+                             />
+                          </div>
+                          <div className="flex items-end">
+                             <p className="text-xs text-muted-foreground mb-2">
+                                {activePost.scheduled_time ? `Scheduled for ${new Date(activePost.scheduled_time).toLocaleString()}` : "Not scheduled yet"}
+                             </p>
+                          </div>
+                       </div>
                     </div>
-                 </div>
+                 )}
+
+                 {/* Post Preview */}
+                 <div className="bg-card border shadow-sm rounded-xl overflow-hidden min-h-[300px]">
+                     {/* LinkedIn Mock Header */}
+                     <div className="p-4 border-b flex gap-3">
+                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary">KA</div>
+                        <div>
+                            <div className="font-semibold text-sm">Krishil Agrawal</div>
+                            <div className="text-xs text-muted-foreground">Building AI Canvas • Now • <span className="opacity-60">🌐</span></div>
+                        </div>
+                     </div>
+                     
+                     {/* Post Content */}
+                     <div className="p-4 md:p-6 text-sm md:text-base leading-relaxed whitespace-pre-wrap font-sans text-foreground/90">
+                        {editMode ? (
+                            <textarea 
+                               className="w-full h-[300px] bg-transparent resize-none focus:outline-none" 
+                               value={content}
+                               onChange={(e) => setContent(e.target.value)}
+                            />
+                        ) : (
+                            content
+                        )}
+                     </div>
+
+                     {/* Mock Footer Actions */}
+                     <div className="border-t bg-secondary/5 px-4 py-3 flex justify-between text-muted-foreground">
+                        <div className="flex gap-4 text-xs font-medium">
+                           <span>Like</span>
+                           <span>Comment</span>
+                           <span>Repost</span>
+                           <span>Send</span>
+                        </div>
+                     </div>
+                  </div>
               </div>
           </div>
 
@@ -161,14 +233,52 @@ export function ContentApproval() {
                 <Button variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">
                    <X className="mr-2 h-4 w-4" /> Reject
                 </Button>
+                
                 {activePost.status === 'published' ? (
                    <Button disabled className="bg-secondary text-muted-foreground">
                       <Check className="mr-2 h-4 w-4" /> Published
                    </Button>
                 ) : (
-                   <Button onClick={handleApprove} className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20">
-                      <Check className="mr-2 h-4 w-4" /> Approve & Schedule
-                   </Button>
+                   <div className="flex gap-2">
+                       <Button 
+                          variant="outline"
+                          onClick={() => {
+                              toast.promise(
+                                  poster('/trigger-post', { post_id: activePost.id }),
+                                  {
+                                      loading: 'Publishing now...',
+                                      success: 'Published successfully!',
+                                      error: 'Failed to publish'
+                                  }
+                              );
+                          }}
+                       >
+                          <Zap className="mr-2 h-4 w-4" /> Publish Now
+                       </Button>
+                       <Button 
+                          onClick={() => {
+                              if (!activePost.scheduled_time) {
+                                  toast.error("Please set a schedule time first (click Edit)");
+                                  setEditMode(true);
+                                  return;
+                              }
+                              toast.promise(
+                                  puter(`/posts/${activePost.id}`, { status: 'scheduled', scheduled_time: activePost.scheduled_time }),
+                                  {
+                                      loading: 'Scheduling...',
+                                      success: () => {
+                                          fetchDrafts();
+                                          return 'Post scheduled!';
+                                      },
+                                      error: 'Failed to schedule'
+                                  }
+                              );
+                          }} 
+                          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20"
+                       >
+                          <Calendar className="mr-2 h-4 w-4" /> Schedule
+                       </Button>
+                   </div>
                 )}
              </div>
           </div>

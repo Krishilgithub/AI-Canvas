@@ -68,96 +68,96 @@ create trigger on_profile_updated
 -- ============================================
 -- Uncomment if you want to store LinkedIn post data
 
--- create table public.linkedin_posts (
---   id uuid default gen_random_uuid() primary key,
---   user_id uuid references auth.users on delete cascade not null,
---   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   content text not null,
---   status text default 'draft' check (status in ('draft', 'scheduled', 'published', 'failed')),
---   scheduled_for timestamp with time zone,
---   published_at timestamp with time zone,
---   post_url text,
---   engagement jsonb default '{}'::jsonb
--- );
+create table public.linkedin_posts (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  content text not null,
+  status text default 'draft' check (status in ('draft', 'scheduled', 'published', 'failed')),
+  scheduled_for timestamp with time zone,
+  published_at timestamp with time zone,
+  post_url text,
+  engagement jsonb default '{}'::jsonb
+);
 
--- alter table public.linkedin_posts enable row level security;
+alter table public.linkedin_posts enable row level security;
 
--- create policy "Users can view their own posts"
---   on public.linkedin_posts for select
---   using (auth.uid() = user_id);
+create policy "Users can view their own posts"
+  on public.linkedin_posts for select
+  using (auth.uid() = user_id);
 
--- create policy "Users can create their own posts"
---   on public.linkedin_posts for insert
---   with check (auth.uid() = user_id);
+create policy "Users can create their own posts"
+  on public.linkedin_posts for insert
+  with check (auth.uid() = user_id);
 
--- create policy "Users can update their own posts"
---   on public.linkedin_posts for update
---   using (auth.uid() = user_id);
+create policy "Users can update their own posts"
+  on public.linkedin_posts for update
+  using (auth.uid() = user_id);
 
--- create policy "Users can delete their own posts"
---   on public.linkedin_posts for delete
---   using (auth.uid() = user_id);
+create policy "Users can delete their own posts"
+  on public.linkedin_posts for delete
+  using (auth.uid() = user_id);
 
 -- ============================================
 -- INTEGRATIONS TABLE (OPTIONAL)
 -- ============================================
 -- Uncomment if you want to store integration credentials
 
--- create table public.integrations (
---   id uuid default gen_random_uuid() primary key,
---   user_id uuid references auth.users on delete cascade not null,
---   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   platform text not null check (platform in ('linkedin', 'twitter', 'facebook', 'instagram')),
---   is_connected boolean default false,
---   access_token text,
---   refresh_token text,
---   token_expires_at timestamp with time zone,
---   platform_user_id text,
---   platform_username text,
---   metadata jsonb default '{}'::jsonb,
---   unique(user_id, platform)
--- );
+create table public.integrations (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  platform text not null check (platform in ('linkedin', 'twitter', 'facebook', 'instagram')),
+  is_connected boolean default false,
+  access_token text,
+  refresh_token text,
+  token_expires_at timestamp with time zone,
+  platform_user_id text,
+  platform_username text,
+  metadata jsonb default '{}'::jsonb,
+  unique(user_id, platform)
+);
 
--- alter table public.integrations enable row level security;
+alter table public.integrations enable row level security;
 
--- create policy "Users can view their own integrations"
---   on public.integrations for select
---   using (auth.uid() = user_id);
+create policy "Users can view their own integrations"
+  on public.integrations for select
+  using (auth.uid() = user_id);
 
--- create policy "Users can manage their own integrations"
---   on public.integrations for all
---   using (auth.uid() = user_id);
+create policy "Users can manage their own integrations"
+  on public.integrations for all
+  using (auth.uid() = user_id);
 
 -- ============================================
 -- AUTOMATION WORKFLOWS TABLE (OPTIONAL)
 -- ============================================
 -- Uncomment if you want to store automation workflows
 
--- create table public.workflows (
---   id uuid default gen_random_uuid() primary key,
---   user_id uuid references auth.users on delete cascade not null,
---   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
---   name text not null,
---   description text,
---   is_active boolean default false,
---   schedule text,
---   config jsonb default '{}'::jsonb,
---   last_run_at timestamp with time zone,
---   next_run_at timestamp with time zone
--- );
+create table public.workflows (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  name text not null,
+  description text,
+  is_active boolean default false,
+  schedule text,
+  config jsonb default '{}'::jsonb,
+  last_run_at timestamp with time zone,
+  next_run_at timestamp with time zone
+);
 
--- alter table public.workflows enable row level security;
+alter table public.workflows enable row level security;
 
--- create policy "Users can view their own workflows"
---   on public.workflows for select
---   using (auth.uid() = user_id);
+create policy "Users can view their own workflows"
+  on public.workflows for select
+  using (auth.uid() = user_id);
 
--- create policy "Users can manage their own workflows"
---   on public.workflows for all
---   using (auth.uid() = user_id);
+create policy "Users can manage their own workflows"
+  on public.workflows for all
+  using (auth.uid() = user_id);
 
 -- ============================================
 -- FUNCTIONS

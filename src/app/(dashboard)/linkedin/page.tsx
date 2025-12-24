@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
+import { fetcher, poster } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Filter, Search, MoreHorizontal, ArrowRight, LayoutList, Sliders, History } from "lucide-react";
+import { Sparkles, Filter, Search, MoreHorizontal, ArrowRight, LayoutList, Sliders, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { ConfigurationPanel } from "@/components/linkedin/configuration-panel";
 import { ContentApproval } from "@/components/linkedin/content-approval";
 import { toast } from "sonner";
@@ -54,22 +55,28 @@ export default function LinkedInPage() {
 function TrendsView() {
   const [trends, setTrends] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [category, setCategory] = useState("All");
 
-  // In a real app, this should user SWR or React Query
-  // For this demo, simple effect is fine
+  const categories = ["All", "Technology", "Business", "Marketing", "AI"];
+
   useEffect(() => {
-    fetch('http://localhost:4000/api/v1/automation/trends')
-      .then(res => res.json())
-      .then(data => {
-         setTrends(Array.isArray(data) ? data : []);
+    setLoading(true);
+    fetcher(`/trends?page=${page}&limit=10&category=${category}`)
+      .then(res => {
+         const list = res.data || res; // Handle both paginated and non-paginated fallbacks
+         setTrends(Array.isArray(list) ? list : []);
+         if (res.meta) setTotalPages(Math.ceil(res.meta.total / res.meta.limit));
          setLoading(false);
       })
       .catch(err => {
          console.error("Fetch error:", err);
-         toast.error("Could not connect to backend", { description: "Is the server running on port 4000?" });
+         toast.error("Could not connect to backend");
          setLoading(false);
       });
-  }, []);
+  }, [page, category]);
+
 
   return (
      <div className="space-y-6">
@@ -110,15 +117,23 @@ function TrendsView() {
                  <div>
                     <CardTitle className="text-lg">Real-time Trend Analysis</CardTitle>
                     <CardDescription>Topics currently gaining velocity in your niche.</CardDescription>
+                    <div className="flex gap-2 mt-2">
+                       {categories.map(cat => (
+                          <button
+                            key={cat} 
+                            onClick={() => { setCategory(cat); setPage(1); }}
+                            className={cn("text-xs px-2 py-1 rounded-full border transition-colors", category === cat ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-secondary")}
+                          >
+                             {cat}
+                          </button>
+                       ))}
+                    </div>
                  </div>
                  <div className="flex gap-2">
                      <Button variant="outline" size="sm" onClick={() => {
                         toast.promise(
-                            fetch('http://localhost:4000/api/v1/automation/seed', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ user_id: 'test-user-123' }) 
-                            }).then(() => window.location.reload()),
+                            poster('/seed')
+                                .then(() => window.location.reload()),
                             {
                                 loading: 'Simulating AI agents...',
                                 success: 'Trends & Drafts generated!',
@@ -161,7 +176,16 @@ function TrendsView() {
                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                   <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                   <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => {
+                                      toast.promise(
+                                          poster('/create-draft', { trend_id: row.id }),
+                                          {
+                                              loading: 'Generating draft with AI...',
+                                              success: 'Draft created! Check "Review Queue".',
+                                              error: 'Failed to create draft'
+                                          }
+                                      );
+                                   }}>
                                       <Sparkles className="mr-2 h-3 w-3" /> Draft Post
                                    </Button>
                                 </td>
@@ -170,7 +194,22 @@ function TrendsView() {
                        )}
                     </tbody>
                  </table>
-              </div>
+               </div>
+                
+               {/* Pagination Controls */}
+               <div className="flex items-center justify-between pt-4">
+                  <div className="text-xs text-muted-foreground">
+                      Page {page} of {totalPages || 1}
+                  </div>
+                  <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>
+                         <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>
+                         <ChevronRight className="h-4 w-4" />
+                      </Button>
+                  </div>
+               </div>
            </CardContent>
         </Card>
      </div>

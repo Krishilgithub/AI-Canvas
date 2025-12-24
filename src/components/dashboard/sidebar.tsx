@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Linkedin, Settings, Workflow, LogOut, Sparkles, Layers } from "lucide-react";
+import { LayoutDashboard, Linkedin, Settings, Workflow, LogOut, Sparkles, Layers, Calendar, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signout } from "@/lib/supabase/actions";
 import { useState } from "react";
@@ -10,7 +10,9 @@ import { useState } from "react";
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/linkedin", label: "LinkedIn Automation", icon: Linkedin },
+  { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/automation", label: "Control Center", icon: Workflow },
+  { href: "/logs", label: "System Logs", icon: FileText },
   { href: "/integrations", label: "Integrations", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -35,7 +37,7 @@ export function Sidebar() {
       
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
          <div className="mb-4 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Platform</div>
-         {navItems.slice(0, 3).map((item) => {
+         {navItems.slice(0, 4).map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href}>
@@ -51,7 +53,7 @@ export function Sidebar() {
          })}
          
          <div className="mt-8 mb-4 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Management</div>
-         {navItems.slice(3).map((item) => {
+         {navItems.slice(4).map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href}>

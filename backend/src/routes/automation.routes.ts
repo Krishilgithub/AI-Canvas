@@ -1,23 +1,44 @@
 import express from 'express';
 import { AutomationController } from '../controllers/automation.controller';
+import { requireAuth } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validation.middleware';
+import { 
+  saveConfigSchema, 
+  getConfigSchema, 
+  triggerPostSchema, 
+  createDraftSchema,
+  getPostsSchema
+} from '../schemas/automation.schema';
+import { updatePostSchema, createPostSchema } from '../schemas/post.schema';
 
 const router = express.Router();
 const controller = new AutomationController();
 
 // Config
-router.post('/config', controller.saveConfig);
-router.get('/config', controller.getConfig);
+router.post('/config', requireAuth, validate(saveConfigSchema), controller.saveConfig);
+router.get('/config', requireAuth, validate(getConfigSchema), controller.getConfig);
 
-// n8n Webhooks / Triggers
-router.post('/ingest-trend', controller.ingestTrend);
-router.post('/create-draft', controller.createDraft);
+// Trends
+router.get('/trends', requireAuth, controller.getTrends);
+router.post('/scan', requireAuth, controller.scanTrends); // Added missing route
+
+// n8n Webhooks / Triggers (Might need different auth for machine-to-machine, keeping requireAuth for now for safety)
+router.post('/ingest-trend', requireAuth, controller.ingestTrend);
+router.post('/create-draft', requireAuth, validate(createDraftSchema), controller.createDraft);
 
 // App Data
-router.get('/trends', controller.getTrends);
-router.get('/posts', controller.getPosts);
+router.get('/posts', requireAuth, validate(getPostsSchema), controller.getPosts);
+router.get('/analytics', requireAuth, controller.getAnalytics);
+router.get('/logs', requireAuth, controller.getLogs);
+router.get('/profile', requireAuth, controller.getProfile);
+router.post('/profile', requireAuth, controller.updateProfile);
+router.get('/connections', requireAuth, controller.getConnections);
+router.put('/posts/:id', requireAuth, validate(updatePostSchema), controller.updatePost);
+router.post('/posts', requireAuth, validate(createPostSchema), controller.createPost);
+router.delete('/posts/:id', requireAuth, controller.deletePost);
 
 // Actions
-router.post('/trigger-post', controller.triggerPost);
-router.post('/seed', controller.seedData);
+router.post('/trigger-post', requireAuth, validate(triggerPostSchema), controller.triggerPost);
+router.post('/seed', requireAuth, controller.seedData);
 
 export default router;
