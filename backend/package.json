@@ -20,6 +20,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "socket.io": "^4.8.3",
+    "stripe": "^20.3.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

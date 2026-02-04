@@ -17,10 +17,11 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: "AI Canvas | Intelligent Social Automation",
-  description: "Enterprise-grade AI content automation for LinkedIn and beyond.",
+  description:
+    "Enterprise-grade AI content automation for LinkedIn and beyond.",
 };
 
-import { Toaster } from 'sonner';
+import { Toaster } from "sonner";
 
 export default function RootLayout({
   children,
@@ -34,7 +35,7 @@ export default function RootLayout({
         className={`${inter.variable} ${manrope.variable} antialiased font-sans bg-background text-foreground`}
       >
         <SmoothScroll>{children}</SmoothScroll>
-        <Toaster position="top-right" theme="light" />
+        <Toaster position="top-right" theme="dark" />
       </body>
     </html>
   );

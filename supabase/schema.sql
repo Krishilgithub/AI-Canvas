@@ -8,9 +8,24 @@ CREATE TABLE public.profiles (
     email TEXT NOT NULL,
     full_name TEXT,
     avatar_url TEXT,
+    notification_preferences JSONB DEFAULT '{}', -- Added preference column
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Trigger to create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, avatar_url)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 -- 2. LINKED ACCOUNTS
 -- Stores OAuth tokens and connection state.
@@ -43,7 +58,9 @@ CREATE TABLE public.automation_configs (
     keywords TEXT[] DEFAULT '{}',
     tone_profile JSONB DEFAULT '{"professionalism": 75, "voice": "thought_leader"}',
     schedule_cron TEXT DEFAULT '0 9 * * 1-5', -- 9 AM Mon-Fri
+    smart_scheduling BOOLEAN DEFAULT FALSE,
     require_approval BOOLEAN DEFAULT TRUE,
+    auto_retweet BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
