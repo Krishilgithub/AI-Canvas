@@ -47,7 +47,7 @@ export function AnalyticsDashboard() {
         // Authenticated download
         const token = (await import('@/lib/supabase/client').then(m => m.createClient().auth.getSession())).data.session?.access_token;
         const isProd = process.env.NODE_ENV === "production";
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || (isProd ? "https://ai-canvass.vercel.app/api/v1/automation" : "http://localhost:4000/api/v1/automation");
+        const baseUrl = isProd ? "https://ai-canvass.vercel.app/api/v1/automation" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1/automation");
         const response = await fetch(`${baseUrl}/analytics/export`, {
             headers: {
                 'Authorization': `Bearer ${token}`

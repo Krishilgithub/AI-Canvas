@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/client";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1/automation";
+const isProd = process.env.NODE_ENV === "production";
+export const API_BASE = isProd 
+  ? "https://ai-canvass.vercel.app/api/v1/automation" 
+  : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1/automation");
 
 async function getHeaders() {
   const supabase = createClient();
