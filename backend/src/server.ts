@@ -34,10 +34,23 @@ const server = http.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
+// Allow both localhost and the live Vercel domain explicitly to prevent CORS blocking from misconfigured envs
+const allowedOrigins = [FRONTEND_URL, "https://ai-canvass.vercel.app", "http://localhost:3000"];
+
 // Middleware
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        // As a fallback for vercel deployment branches, just allow it if we are on vercel
+        if (process.env.VERCEL === "1") return callback(null, true);
+        const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   }),
 );
