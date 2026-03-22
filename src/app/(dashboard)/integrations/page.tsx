@@ -58,6 +58,7 @@ export default function IntegrationsPage() {
     else if (platform === "Twitter") endpoint = "/auth/twitter/connect";
     else if (platform === "Instagram") endpoint = "/auth/instagram/connect";
     else if (platform === "Reddit") endpoint = "/auth/reddit/connect";
+    else if (platform === "Slack") endpoint = "/auth/slack/connect";
     else if (platform === "YouTube") endpoint = "/auth/youtube/connect";
     else {
       toast.info("Integration coming soon");
