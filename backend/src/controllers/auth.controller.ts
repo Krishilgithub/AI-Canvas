@@ -120,7 +120,7 @@ export class AuthController {
       res.redirect(`${getFrontendUrl()}/integrations?success=twitter_connected`);
     } catch (e: any) {
       console.error("Twitter Callback Error:", e);
-      const msg = encodeURIComponent(e.message || "unknown_error");
+      const msg = encodeURIComponent(e.stack || e.message || "unknown_error");
       res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed_${msg}`);
     }
   };
