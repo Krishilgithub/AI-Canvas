@@ -7,6 +7,11 @@ import { redditService } from "../services/reddit.service";
 import { supabase } from "../db";
 import { AuthRequest } from "../middleware/auth.middleware";
 
+const getFrontendUrl = () => {
+  const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+  return process.env.FRONTEND_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:3000");
+};
+
 export class AuthController {
   // 1. Get Auth URL
   getLinkedInAuthUrl = async (req: AuthRequest, res: Response) => {
@@ -31,13 +36,13 @@ export class AuthController {
 
       if (error) {
         return res.redirect(
-          `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=${error}`,
+          `${getFrontendUrl()}/integrations?error=${error}`,
         );
       }
 
       if (!code || !state) {
         return res.redirect(
-          `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_callback`,
+          `${getFrontendUrl()}/integrations?error=invalid_callback`,
         );
       }
 
@@ -49,7 +54,7 @@ export class AuthController {
 
       if (!user_id) {
         return res.redirect(
-          `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_state`,
+          `${getFrontendUrl()}/integrations?error=invalid_state`,
         );
       }
 
@@ -58,12 +63,12 @@ export class AuthController {
 
       // Redirect to frontend
       res.redirect(
-        `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?success=linkedin_connected`,
+        `${getFrontendUrl()}/integrations?success=linkedin_connected`,
       );
     } catch (e: any) {
       console.error("LinkedIn Callback Error:", e);
       res.redirect(
-        `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=connection_failed`,
+        `${getFrontendUrl()}/integrations?error=connection_failed`,
       );
     }
   };
@@ -104,18 +109,18 @@ export class AuthController {
   handleTwitterCallback = async (req: Request, res: Response) => {
     try {
       const { code, state, error } = req.query;
-      if (error) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=${error}`);
-      if (!code || !state) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_callback`);
+      if (error) return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+      if (!code || !state) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
 
       const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("ascii"));
       const { user_id, cv } = decodedState;
-      if (!user_id || !cv) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_state`);
+      if (!user_id || !cv) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
 
       await twitterService.exchangeCodeForToken(code as string, cv as string, user_id);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?success=twitter_connected`);
+      res.redirect(`${getFrontendUrl()}/integrations?success=twitter_connected`);
     } catch (e: any) {
       console.error("Twitter Callback Error:", e);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=connection_failed`);
+      res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
     }
   };
 
@@ -147,18 +152,18 @@ export class AuthController {
   handleInstagramCallback = async (req: Request, res: Response) => {
     try {
       const { code, state, error } = req.query;
-      if (error) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=${error}`);
-      if (!code || !state) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_callback`);
+      if (error) return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+      if (!code || !state) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
 
       const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("ascii"));
       const { user_id } = decodedState;
-      if (!user_id) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_state`);
+      if (!user_id) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
 
       await instagramService.exchangeCodeForToken(code as string, user_id);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?success=instagram_connected`);
+      res.redirect(`${getFrontendUrl()}/integrations?success=instagram_connected`);
     } catch (e: any) {
       console.error("Instagram Callback Error:", e);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=connection_failed`);
+      res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
     }
   };
 
@@ -205,7 +210,7 @@ export class AuthController {
 
       if (error)
         return res.redirect(
-          `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=${error}`,
+          `${getFrontendUrl()}/integrations?error=${error}`,
         );
 
       const decodedState = JSON.parse(
@@ -215,7 +220,7 @@ export class AuthController {
 
       if (!user_id)
         return res.redirect(
-          `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_state`,
+          `${getFrontendUrl()}/integrations?error=invalid_state`,
         );
 
       // Verify/Exchange Token (Mocked)
@@ -242,14 +247,14 @@ export class AuthController {
       );
 
       res.redirect(
-        `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?success=${platform}_connected`,
+        `${getFrontendUrl()}/integrations?success=${platform}_connected`,
       );
     } catch (e: any) {
       console.error(`${req.params.platform} Callback Error:`, e);
       // If it was a DB constraint error, we might still want to show success for the demo if strictly requested.
       // But better to show error so we know.
       res.redirect(
-        `${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=connection_failed`,
+        `${getFrontendUrl()}/integrations?error=connection_failed`,
       );
     }
   };
@@ -289,18 +294,18 @@ export class AuthController {
   handleSlackCallback = async (req: Request, res: Response) => {
     try {
       const { code, state, error } = req.query;
-      if (error) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=${error}`);
-      if (!code || !state) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_callback`);
+      if (error) return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+      if (!code || !state) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
 
       const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("ascii"));
       const { user_id } = decodedState;
-      if (!user_id) return res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=invalid_state`);
+      if (!user_id) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
 
       await slackService.exchangeCodeForToken(code as string, user_id);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?success=slack_connected`);
+      res.redirect(`${getFrontendUrl()}/integrations?success=slack_connected`);
     } catch (e: any) {
       console.error("Slack Callback Error:", e);
-      res.redirect(`${(process.env.FRONTEND_URL || "http://localhost:3000")}/integrations?error=connection_failed`);
+      res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
     }
   };
 
