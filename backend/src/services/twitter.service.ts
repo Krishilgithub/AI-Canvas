@@ -71,9 +71,9 @@ class TwitterService {
       );
       
       return true;
-    } catch (e) {
-      console.error('[Twitter OAuth Error]', e);
-      throw e;
+    } catch (e: any) {
+      console.error('[Twitter OAuth Error]', e?.data || e?.message);
+      throw new Error(e?.data?.error_description || e?.message || "Failed to connect to Twitter");
     }
   }
 
