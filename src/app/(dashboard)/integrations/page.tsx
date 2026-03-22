@@ -122,7 +122,7 @@ export default function IntegrationsPage() {
       <div>
         <h1 className="text-3xl font-bold font-heading">Integrations</h1>
         <p className="text-muted-foreground">
-          Connect your platforms to enable publishing and notifications.
+          Connect your platforms to enable publishing and notifications
         </p>
       </div>
 
