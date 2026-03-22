@@ -66,8 +66,9 @@ export default function IntegrationsPage() {
 
     try {
       const token = await getAuthToken();
+      const isProd = process.env.NODE_ENV === "production";
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+        process.env.NEXT_PUBLIC_API_URL || (isProd ? "https://ai-canvass.vercel.app/api/v1/automation" : "http://localhost:4000/api/v1/automation");
       const base = apiUrl.replace("/automation", "");
 
       const res = await fetch(`${base}${endpoint}`, {
@@ -90,8 +91,9 @@ export default function IntegrationsPage() {
 
     try {
       const token = await getAuthToken();
+      const isProd = process.env.NODE_ENV === "production";
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+        process.env.NEXT_PUBLIC_API_URL || (isProd ? "https://ai-canvass.vercel.app/api/v1/automation" : "http://localhost:4000/api/v1/automation");
       const base = apiUrl.replace("/automation", "");
 
       await fetch(`${base}${endpoint}`, {

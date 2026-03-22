@@ -29,7 +29,8 @@ export class SocketClient {
     if (!session?.access_token) return;
 
     // Connect to Backend URL
-    const URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1/automation', '') || 'http://localhost:4000';
+    const isProd = process.env.NODE_ENV === "production";
+    const URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1/automation', '') || (isProd ? "https://ai-canvass.vercel.app" : 'http://localhost:4000');
     
     this.socket = io(URL, {
         auth: {
