@@ -83,7 +83,11 @@ export class MockLinkedInService implements ILinkedInService {
 export class RealLinkedInService implements ILinkedInService {
   private clientId = process.env.LINKEDIN_CLIENT_ID;
   private clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-  private redirectUri = process.env.LINKEDIN_REDIRECT_URI || `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/auth/linkedin/callback`;
+  private get redirectUri() {
+    const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+    const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+    return `${appUrl}/api/v1/auth/linkedin/callback`;
+  }
 
   getAuthUrl(state: string): string {
     const scope = encodeURIComponent("openid profile w_member_social email");
