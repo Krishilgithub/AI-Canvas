@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-// import { fetcher, poster } from "@/lib/api-client";
+import { fetcher } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -350,6 +350,25 @@ function TrendsView() {
 }
 
 function HistoryView() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetcher("/api/v1/posts?platform=instagram")
+      .then((data) => {
+        // Transform posts to logs format
+        const transformed = (data.posts || []).map((post: any) => ({
+          action: `Posted: ${post.content.substring(0, 20)}...`,
+          time: new Date(post.created_at).toLocaleDateString(),
+          status: post.status === "published" ? "Success" : post.status,
+          type: "reel", // simplistic assumption
+        }));
+        setLogs(transformed);
+      })
+      .catch((e) => console.error(e))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <Card>
       <CardHeader>
@@ -358,71 +377,54 @@ function HistoryView() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {[
-            {
-              action: "Posted Reel: \\'Office Tour\\'",
-              time: "2 hours ago",
-              status: "Success",
-              type: "reel",
-            },
-            {
-              action: "Auto-replied to @user123's story",
-              time: "5 hours ago",
-              status: "Success",
-              type: "dm",
-            },
-            {
-              action: "Liked 42 posts in #saas",
-              time: "Today, 9:00 AM",
-              status: "Success",
-              type: "engagement",
-            },
-            {
-              action: "Failed to fetch copyright info",
-              time: "Yesterday",
-              status: "Error",
-              type: "system",
-            },
-          ].map((log, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center",
-                    log.type === "reel"
-                      ? "bg-purple-100 text-purple-600"
-                      : log.type === "dm"
-                        ? "bg-blue-100 text-blue-600"
-                        : log.type === "engagement"
-                          ? "bg-pink-100 text-pink-600"
-                          : "bg-gray-100 text-gray-600",
-                  )}
-                >
-                  {log.type === "reel" && <Play className="h-4 w-4" />}
-                  {log.type === "dm" && <MessageCircle className="h-4 w-4" />}
-                  {log.type === "engagement" && <Heart className="h-4 w-4" />}
-                  {log.type === "system" && <Settings className="h-4 w-4" />}
-                </div>
-                <span className="font-medium text-sm">{log.action}</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-muted-foreground">{log.time}</span>
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded-full font-medium border",
-                    log.status === "Success"
-                      ? "bg-green-500/10 text-green-600 border-green-500/20"
-                      : "bg-red-500/10 text-red-600 border-red-500/20",
-                  )}
-                >
-                  {log.status}
-                </span>
-              </div>
+          {loading ? (
+            <div className="text-center py-4">Loading history...</div>
+          ) : logs.length === 0 ? (
+            <div className="text-center py-4 text-muted-foreground">
+              No recent history.
             </div>
-          ))}
+          ) : (
+            logs.map((log, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-full flex items-center justify-center",
+                      log.type === "reel"
+                        ? "bg-purple-100 text-purple-600"
+                        : log.type === "dm"
+                          ? "bg-blue-100 text-blue-600"
+                          : log.type === "engagement"
+                            ? "bg-pink-100 text-pink-600"
+                            : "bg-gray-100 text-gray-600",
+                    )}
+                  >
+                    {log.type === "reel" && <Play className="h-4 w-4" />}
+                    {log.type === "dm" && <MessageCircle className="h-4 w-4" />}
+                    {log.type === "engagement" && <Heart className="h-4 w-4" />}
+                    {log.type === "system" && <Settings className="h-4 w-4" />}
+                  </div>
+                  <span className="font-medium text-sm">{log.action}</span>
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-muted-foreground">{log.time}</span>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full font-medium border",
+                      log.status === "Success"
+                        ? "bg-green-500/10 text-green-600 border-green-500/20"
+                        : "bg-red-500/10 text-red-600 border-red-500/20",
+                    )}
+                  >
+                    {log.status}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </CardContent>
     </Card>

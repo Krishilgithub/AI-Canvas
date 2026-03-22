@@ -28,12 +28,15 @@ export async function getAuthToken() {
   return session?.access_token || null;
 }
 
-export async function fetcher(url: string) {
+export async function fetcher(url: string, options: RequestInit = {}) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_BASE}${url}`, { headers });
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers: { ...headers, ...(options.headers as Record<string, string> || {}) },
+  });
 
   if (!res.ok) {
-    let error: any = {};
+    let error: Record<string, string> = {};
     try {
       error = await res.json();
     } catch (e) {
@@ -58,9 +61,10 @@ export async function poster(url: string, body: any = {}) {
     try {
       error = await res.json();
     } catch (e) {
-      error = { error: await res.text() };
+      const text = await res.text().catch(() => "");
+      error = { error: text || res.statusText };
     }
-    console.error(`[API Poster Error] ${url}:`, error);
+    console.error(`[API Poster Error] ${url}:`, JSON.stringify(error) === '{}' ? 'Empty Error Object' : error);
     throw new Error(error.error || "API Error");
   }
   return res.json();

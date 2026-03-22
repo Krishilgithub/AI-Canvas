@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { fetcher, poster } from "@/lib/api-client";
 import {
   Card,
@@ -59,6 +60,20 @@ export default function SettingsPage() {
     loadData();
   }, []);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (searchParams.get("success")) {
+      toast.success("Subscription updated successfully!");
+      router.replace("/settings");
+    }
+    if (searchParams.get("canceled")) {
+      toast.error("Subscription checkout canceled.");
+      router.replace("/settings");
+    }
+  }, [searchParams, router]);
+
   const handleSaveProfile = async () => {
     try {
       await poster("/user/profile", {
@@ -87,6 +102,28 @@ export default function SettingsPage() {
       toast.success("New API Key generated!");
     } catch (error: any) {
       toast.error("Failed to generate API Key.", {
+        description: error.message,
+      });
+    }
+  };
+
+  const handleSubscriptionAction = async () => {
+    if (profile.subscription?.plan === "pro") {
+      toast.info("Manage subscription via Stripe Portal (coming soon).");
+      return;
+    }
+
+    try {
+      toast.loading("Redirecting to checkout...");
+      const data = await poster("/payment/create-checkout-session", {
+        priceId:
+          process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || "price_1Ql...placeholder", // Replace with real Price ID
+      });
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      toast.error("Failed to start checkout.", {
         description: error.message,
       });
     }
@@ -206,7 +243,11 @@ export default function SettingsPage() {
                   : "No upcoming billing"}
               </div>
             </div>
-            <Button variant="secondary">Manage Subscription</Button>
+            <Button variant="secondary" onClick={handleSubscriptionAction}>
+              {profile.subscription?.plan === "pro"
+                ? "Manage Subscription"
+                : "Upgrade to Pro"}
+            </Button>
           </div>
         </CardContent>
       </Card>

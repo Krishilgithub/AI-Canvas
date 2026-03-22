@@ -111,11 +111,9 @@ export default function IntegrationsPage() {
         (c) =>
           c.platform === platform.toLowerCase() &&
           (c.status === "connected" || c.status === "active"),
-        c.status === "connected" || c.status === "active",
       ) ||
-      platform === "Email" ||
-      platform === "YouTube" // Mock: Always show YouTube as connected for dev
-    ); // Email always 'connected' for now
+      platform === "Email" // Email always shows as connected
+    );
   };
 
   return (

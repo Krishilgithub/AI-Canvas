@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { fetcher, puter, remover } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -69,38 +70,26 @@ export function ContentApproval() {
   const [genLength, setGenLength] = useState("medium");
 
   useEffect(() => {
-    // Simulate fetching drafts
-    // In real app: fetcher("/posts/drafts?platform=instagram")
-    setLoading(true);
-    setTimeout(() => {
-      setDrafts([
-        {
-          id: "1",
-          type: "image",
+    fetcher("/api/v1/posts?platform=instagram&status=draft")
+      .then((data) => {
+        const mapped = (data || []).map((p: any) => ({
+          id: p.id,
+          type: p.media_type || "image", // fallback
           imageUrl:
-            "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=500&h=500&fit=crop",
-          caption:
-            "Minimalist workspace setup for maximum productivity. #workspace #minimalism #productivity",
-          status: "draft",
-          scheduledFor: "Tomorrow, 10:00 AM",
-          likes: 124,
-          comments: 12,
-        },
-        {
-          id: "2",
-          type: "reel",
-          imageUrl:
-            "https://images.unsplash.com/photo-1611162616475-46b635cb6868?w=300&h=600&fit=crop", // Vertical thumb
-          caption:
-            "3 Tips to grow your SaaS business in 2024. 🚀 #saas #growth #business",
-          status: "processing",
-          scheduledFor: "Unscheduled",
+            p.media_url ||
+            "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=500&h=500&fit=crop", // fallback
+          caption: p.content,
+          status: p.status,
+          scheduledFor: p.scheduled_at
+            ? new Date(p.scheduled_at).toLocaleString()
+            : "Unscheduled",
           likes: 0,
           comments: 0,
-        },
-      ]);
-      setLoading(false);
-    }, 1000);
+        }));
+        setDrafts(mapped);
+      })
+      .catch((e) => console.error("Failed to load drafts", e))
+      .finally(() => setLoading(false));
   }, []);
 
   const activePost = drafts.find((d) => d.id === selectedPostId);
@@ -108,22 +97,38 @@ export function ContentApproval() {
   useEffect(() => {
     if (activePost) {
       setCaption(activePost.caption);
-      // setIsEditing(false); // Removed unused state
     }
   }, [selectedPostId, activePost]);
 
   const handleApprove = async () => {
     if (!selectedPostId) return;
-    toast.success("Post approved and scheduled!");
-    // Update local state to remove approved post
-    setDrafts(drafts.filter((d) => d.id !== selectedPostId));
-    setSelectedPostId(null);
+
+    try {
+      await puter(`/api/v1/posts/${selectedPostId}`, {
+        status: "scheduled",
+        content: caption, // Save any edits to caption
+        scheduled_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Schedule for tomorrow for now
+      });
+      toast.success("Post approved and scheduled!");
+      setDrafts(drafts.filter((d) => d.id !== selectedPostId));
+      setSelectedPostId(null);
+    } catch (e) {
+      toast.error("Failed to approve post");
+    }
   };
 
   const handleReject = async () => {
-    toast("Draft rejected", { description: "The agent will learn from this." });
-    setDrafts(drafts.filter((d) => d.id !== selectedPostId));
-    setSelectedPostId(null);
+    if (!selectedPostId) return;
+    try {
+      await remover(`/api/v1/posts/${selectedPostId}`);
+      toast("Draft rejected", {
+        description: "The agent will learn from this.",
+      });
+      setDrafts(drafts.filter((d) => d.id !== selectedPostId));
+      setSelectedPostId(null);
+    } catch (e) {
+      toast.error("Failed to reject post");
+    }
   };
 
   const handleGenerateDraft = async () => {
@@ -171,7 +176,7 @@ export function ContentApproval() {
   };
 
   return (
-    <div className="grid lg:grid-cols-12 gap-6 h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="grid lg:grid-cols-12 gap-6 h-auto lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* 1. Queue List */}
       <div className="lg:col-span-4 flex flex-col border-r pr-4 overflow-hidden">
         <h3 className="font-semibold text-lg mb-4 flex items-center justify-between">

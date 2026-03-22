@@ -317,6 +317,28 @@ function TrendsView() {
 }
 
 function HistoryView() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetcher("/posts?platform=twitter")
+      .then((res) => {
+        const posts = Array.isArray(res) ? res : res.data || [];
+        const transformed = posts.map((post: any) => ({
+          action: `Tweeted: ${post.content.substring(0, 30)}...`,
+          time: new Date(post.created_at).toLocaleDateString(),
+          status: post.status === "published" ? "Success" : post.status,
+          type: "post",
+        }));
+        setLogs(transformed);
+      })
+      .catch((err) => {
+        console.error("Fetch history error:", err);
+        toast.error("Failed to load history");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <Card>
       <CardHeader>
@@ -327,38 +349,42 @@ function HistoryView() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {[
-            {
-              action: "Posted Thread 'AI in 2024'",
-              time: "1 hour ago",
-              status: "Success",
-            },
-            {
-              action: "Generated 5 drafts for #TechTwitter",
-              time: "4 hours ago",
-              status: "Success",
-            },
-          ].map((log, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
-            >
-              <span className="font-medium text-sm">{log.action}</span>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-muted-foreground">{log.time}</span>
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded-full font-medium border",
-                    log.status === "Success"
-                      ? "bg-green-500/10 text-green-600 border-green-500/20"
-                      : "bg-red-500/10 text-red-600 border-red-500/20",
-                  )}
-                >
-                  {log.status}
-                </span>
-              </div>
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading history...
             </div>
-          ))}
+          ) : logs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No history found.
+            </div>
+          ) : (
+            logs.map((log, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-400 flex items-center justify-center">
+                    <LayoutList className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium text-sm">{log.action}</span>
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-muted-foreground">{log.time}</span>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full font-medium border",
+                      log.status === "Success"
+                        ? "bg-green-500/10 text-green-600 border-green-500/20"
+                        : "bg-red-500/10 text-red-600 border-red-500/20",
+                    )}
+                  >
+                    {log.status}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </CardContent>
     </Card>

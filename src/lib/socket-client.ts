@@ -16,6 +16,12 @@ export class SocketClient {
 
   async connect() {
     if (this.socket?.connected) return;
+    
+    // Disable Socket on Vercel
+    if (process.env.NEXT_PUBLIC_VERCEL === "1") {
+        console.warn('⚡ Socket.IO is disabled on Vercel deployment');
+        return;
+    }
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -73,7 +79,7 @@ export class SocketClient {
       this.socket?.on('user_typing', callback);
   }
 
-  offTyping(callback: (user: any) => void) {
+  offTyping(callback: (user: { userId: string, email: string }) => void) {
       this.socket?.off('user_typing', callback);
   }
 

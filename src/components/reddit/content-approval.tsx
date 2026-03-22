@@ -86,7 +86,7 @@ export function ContentApproval() {
   const activePost = drafts.find((d) => d.id === selectedPostId);
 
   return (
-    <div className="grid lg:grid-cols-12 gap-6 h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="grid lg:grid-cols-12 gap-6 h-auto lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Left: Queue List */}
       <div className="lg:col-span-4 flex flex-col gap-4 overflow-y-auto pr-2">
         {drafts.length === 0 && (
