@@ -83,7 +83,7 @@ export class MockLinkedInService implements ILinkedInService {
 export class RealLinkedInService implements ILinkedInService {
   private clientId = process.env.LINKEDIN_CLIENT_ID;
   private clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-  private redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  private redirectUri = process.env.LINKEDIN_REDIRECT_URI || `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/auth/linkedin/callback`;
 
   getAuthUrl(state: string): string {
     const scope = encodeURIComponent("openid profile w_member_social email");
@@ -173,28 +173,7 @@ export class RealLinkedInService implements ILinkedInService {
     if (!account || !account.access_token)
       throw new Error("LinkedIn account not connected");
 
-    // DELEGATE TO N8N
-    if (process.env.N8N_PUBLISH_WEBHOOK_URL) {
-      console.log(`[LinkedIn] Delegating publishing to n8n for user ${userId}`);
-      const res = await axios.post(process.env.N8N_PUBLISH_WEBHOOK_URL, {
-        accessToken: account.access_token,
-        personUrn: account.platform_user_id,
-        content: content,
-        mediaUrls: mediaUrls,
-      });
-
-      if (res.status === 200 || res.status === 201) {
-        // Assuming n8n returns the LinkedIn response or at least success
-        return {
-          success: true,
-          platform_post_id: res.data.id || "posted-via-n8n",
-          url: res.data.url || "#",
-        };
-      }
-      throw new Error("n8n publishing failed");
-    }
-
-    // NATIVE PUBLISHING (Fallback)
+    // NATIVE PUBLISHING
     const body = {
       author: `urn:li:person:${account.platform_user_id}`,
       lifecycleState: "PUBLISHED",
@@ -211,18 +190,40 @@ export class RealLinkedInService implements ILinkedInService {
       },
     };
 
-    const res = await axios.post("https://api.linkedin.com/v2/ugcPosts", body, {
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-    });
+    try {
+      const res = await axios.post("https://api.linkedin.com/v2/ugcPosts", body, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      });
 
-    return {
-      success: true,
-      platform_post_id: res.data.id,
-      url: `https://www.linkedin.com/feed/update/${res.data.id}`,
-    };
+      const postId = res.headers["x-restli-id"] || res.data?.id;
+
+      return {
+        success: true,
+        platform_post_id: postId,
+        url: `https://www.linkedin.com/feed/update/${postId}`,
+      };
+    } catch (error: any) {
+      console.error("[LinkedIn API Error]:", error.response?.data || error.message);
+      
+      const errMsg = error.response?.data?.message || "";
+      if (errMsg.includes("Content is a duplicate of")) {
+        const match = errMsg.match(/(urn:li:share:\d+)/);
+        if (match) {
+          return {
+            success: true,
+            platform_post_id: match[1],
+            url: `https://www.linkedin.com/feed/update/${match[1]}`,
+          };
+        }
+      }
+
+      throw new Error(
+        error.response?.data?.message || error.response?.data || error.message
+      );
+    }
   }
 }
 

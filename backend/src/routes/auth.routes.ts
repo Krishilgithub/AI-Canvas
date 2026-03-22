@@ -13,7 +13,27 @@ router.get("/linkedin/callback", authController.handleLinkedInCallback);
 // Disconnect: DELETE /api/v1/auth/linkedin
 router.delete("/linkedin", requireAuth, authController.disconnectLinkedIn);
 
-// Generic Routes for Twitter, Instagram, Reddit, YouTube
+// Twitter
+router.get("/twitter/connect", requireAuth, authController.getTwitterAuthUrl);
+router.get("/twitter/callback", authController.handleTwitterCallback);
+router.delete("/twitter", requireAuth, authController.disconnectTwitter);
+
+// --- INSTAGRAM ---
+router.get("/instagram/connect", requireAuth, authController.getInstagramAuthUrl);
+router.get("/instagram/callback", authController.handleInstagramCallback);
+router.delete("/instagram", requireAuth, authController.disconnectInstagram);
+
+// --- SLACK ---
+router.get("/slack/connect", requireAuth, authController.getSlackAuthUrl);
+router.get("/slack/callback", authController.handleSlackCallback);
+router.delete("/slack", requireAuth, authController.disconnectSlack);
+
+// --- REDDIT ---
+router.get("/reddit/connect", requireAuth, authController.getRedditAuthUrl);
+router.get("/reddit/callback", authController.handleRedditCallback);
+router.delete("/reddit", requireAuth, authController.disconnectReddit);
+
+// --- GENERIC / FALLBACK ---
 // Connect: GET /api/v1/auth/:platform/connect
 router.get("/:platform/connect", requireAuth, authController.connectPlatform);
 

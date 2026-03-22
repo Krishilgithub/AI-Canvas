@@ -6,22 +6,28 @@ import morgan from "morgan";
 import automationRoutes from "./routes/automation.routes";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
+import analyticsRoutes from "./routes/analytics.routes";
+import postRoutes from "./routes/post.routes";
+import paymentRoutes from "./routes/payment.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { schedulerService } from "./services/scheduler.service";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./swagger";
 
 // Load env vars
 dotenv.config();
 
-// Start Scheduler
-schedulerService.start();
+
 
 import http from "http";
 import { socketService } from "./services/socket.service";
 
 // ... imports remain the same
 
-// Start Scheduler
-schedulerService.start();
+// Start Scheduler only if not on Vercel
+if (process.env.VERCEL !== "1") {
+  schedulerService.start();
+}
 
 const app = express();
 const server = http.createServer(app); // Create HTTP server from Express app
@@ -37,15 +43,29 @@ app.use(
 );
 app.use(helmet());
 app.use(morgan("dev"));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: express.Request & { rawBody?: Buffer }, res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 
-// Initialize Socket.IO
-socketService.init(server, FRONTEND_URL);
+// Initialize Socket.IO only if not on Vercel
+if (process.env.VERCEL !== "1") {
+  socketService.init(server, FRONTEND_URL);
+}
 
 // Routes
 app.use("/api/v1/automation", automationRoutes);
 app.use("/api/v1/user", userRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/posts", postRoutes);
+app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/auth", authRoutes);
+
+// Swagger Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Health Check
 app.get("/health", (req, res) => {
@@ -56,7 +76,12 @@ app.get("/health", (req, res) => {
 app.use(errorHandler);
 
 // Start Server (Listen on HTTP Server, not just Express App)
-server.listen(PORT, () => {
-  console.log(`🚀 Backend Server running on port ${PORT}`);
-  console.log(`📡 Environment: ${process.env.NODE_ENV || "development"}`);
-});
+if (process.env.VERCEL !== "1") {
+  server.listen(PORT, () => {
+    console.log(`🚀 Backend Server running on port ${PORT}`);
+    console.log(`📡 Environment: ${process.env.NODE_ENV || "development"}`);
+  });
+}
+
+// Export the express app for Vercel Serverless Functions
+export default app;

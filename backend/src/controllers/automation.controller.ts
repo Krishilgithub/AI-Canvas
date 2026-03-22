@@ -1,15 +1,56 @@
 import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { supabase } from "../db";
-import { linkedInService } from "../services/linkedin.service";
+import { linkedInService, MockLinkedInService, RealLinkedInService } from "../services/linkedin.service";
+import { twitterService } from "../services/twitter.service";
+import { instagramService } from "../services/instagram.service";
+import { slackService } from "../services/slack.service";
+import { redditService } from "../services/reddit.service";
 import { newsService } from "../services/news.service";
 import { geminiService } from "../services/gemini.service";
-import { n8nService } from "../services/n8n.service";
+import { workflowService } from "../services/workflow.service";
 import { Platform, PostStatus, LogLevel } from "../constants";
 import { EmailService } from "../services/email.service";
+import { schedulerService } from "../services/scheduler.service";
 
 export class AutomationController {
   private emailService = new EmailService();
+
+  /** Limits per subscription_tier (posts per billing cycle) */
+  private static readonly PLAN_LIMITS: Record<string, number> = {
+    free: 10,
+    pro: 200,
+    enterprise: Infinity,
+  };
+
+  /** Returns true if user is within their quota, false if exceeded */
+  private checkQuota = async (
+    user_id: string,
+  ): Promise<{ allowed: boolean; used: number; limit: number; tier: string }> => {
+    // 1. Get user tier
+    const { data: user } = await supabase
+      .from("users")
+      .select("subscription_tier")
+      .eq("id", user_id)
+      .single();
+
+    const tier = (user?.subscription_tier || "free").toLowerCase();
+    const limit = AutomationController.PLAN_LIMITS[tier] ?? 10;
+
+    // 2. Count AI-generated posts this calendar month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { count } = await supabase
+      .from("generated_posts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user_id)
+      .gte("created_at", startOfMonth.toISOString());
+
+    const used = count || 0;
+    return { allowed: used < limit, used, limit, tier };
+  };
 
   // 1. Save Configuration
   saveConfig = async (req: AuthRequest, res: Response) => {
@@ -68,14 +109,8 @@ export class AutomationController {
     }
   };
 
-  // 2. Ingest Trends (from n8n)
-  ingestTrend = async (req: Request, res: Response) => {
-    // ... (Keep existing implementation or add mock fallback if needed)
-    // For brevity, assuming this is mostly n8n usage
-    res.json({ success: true });
-  };
 
-  // NEW: Scan Real Trends
+  // Scan Real Trends — uses the Advanced Trend Intelligence System
   scanTrends = async (req: AuthRequest, res: Response) => {
     try {
       const user_id = req.user?.id;
@@ -85,6 +120,7 @@ export class AutomationController {
       let keywords: string[] = [];
 
       const platform = (req.body.platform as Platform) || Platform.LINKEDIN;
+
       // Fetch config to get niches AND keywords
       const { data: config } = await supabase
         .from("automation_configs")
@@ -95,59 +131,69 @@ export class AutomationController {
 
       if (config) {
         if (config.niches && config.niches.length > 0) niches = config.niches;
-        if (config.keywords && config.keywords.length > 0)
-          keywords = config.keywords;
+        if (config.keywords && config.keywords.length > 0) keywords = config.keywords;
       }
 
-      // Construct robust query: (niche1 OR niche2) AND (key1 OR key2)
-      // If no keywords, just niches.
+      // Also fetch user profile for genre context
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("role, niche, goals, bio")
+        .eq("id", user_id)
+        .single();
+
+      const genre = niches[0] || userProfile?.niche || "Technology";
+
+      // Build search query
       const nicheQuery = niches.map((n) => `"${n}"`).join(" OR ");
       const keywordQuery = keywords.map((k) => `"${k}"`).join(" OR ");
-
       let query = "";
       if (nicheQuery && keywordQuery) {
         query = `(${nicheQuery}) AND (${keywordQuery})`;
       } else if (nicheQuery) {
         query = nicheQuery;
       } else {
-        query = "Technology OR Business"; // Fallback
+        query = "Technology OR Business";
       }
 
-      console.log(`[SCAN] Fetching news for: ${query}`);
+      console.log(`[SCAN] Fetching news for: ${query} | Platform: ${platform}`);
 
-      // 2. Fetch News (Real)
+      // Fetch News
       const newsItems = await newsService.fetchNews(query);
 
       if (newsItems.length === 0) {
-        return res.json({
-          success: true,
-          message: "No new news found",
-          trends: [],
-        });
+        return res.json({ success: true, message: "No new news found", trends: [] });
       }
 
-      // 3. Analyze with Gemini (Real)
-      const analyzedTrends = await geminiService.analyzeTrendPotential(
-        newsItems.slice(0, 5),
-      );
+      // Advanced Trend Intelligence Analysis
+      const analyzedTrends = await geminiService.analyzeTrendIntelligence({
+        genre,
+        keywords,
+        target_platform: platform,
+        time_window: "last 24 hours",
+        platform_data: newsItems.slice(0, 10),
+      });
 
-      // 4. Save
+      // Save to DB
       const savedTrends = [];
       for (const trend of analyzedTrends) {
-        const trendObj: any = {
-          topic: trend.title,
-          category: trend.category || "General",
-          velocity_score: trend.velocity_score,
+        const trendObj = {
+          topic: trend.topic,
+          category: trend.category || genre,
+          velocity_score: Math.round(trend.impact_score * 100),
           source: "newsdata_io",
           metadata: {
             link: trend.link,
-            insight: trend.insight,
+            insight: trend.reasoning,
+            suggested_angle: trend.suggested_angle,
+            impact_score: trend.impact_score,
+            confidence: trend.confidence,
+            engagement_signals: trend.engagement_signals,
+            platforms: trend.platforms,
             query_used: query,
           },
           created_at: new Date().toISOString(),
         };
 
-        // Check if trend exists? For now just insert (or could upsert based on link)
         const { data } = await supabase
           .from("detected_trends")
           .insert(trendObj)
@@ -156,31 +202,22 @@ export class AutomationController {
         if (data) savedTrends.push(data);
       }
 
-      // 5. Auto-generate drafts
-      // Fetch user profile for context once
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("role, niche, goals, bio")
-        .eq("id", user_id)
-        .single();
-
+      // Auto-generate drafts for high-impact trends (impact_score > 0.70)
       for (const trend of savedTrends) {
         if (trend.velocity_score > 70) {
-          const draftContent = await geminiService.generateDraft(
-            trend.topic,
-            trend.metadata.insight,
-            userProfile, // Pass user context
+          const draftContent = await workflowService.generatePost(
+            { topic: trend.topic, platform: platform },
+            userProfile || undefined,
+            trend.metadata?.suggested_angle || trend.metadata?.insight
           );
 
-          const postObj: any = {
+          await supabase.from("generated_posts").insert({
             user_id,
             content: draftContent,
             trend_id: trend.id,
             status: PostStatus.NEEDS_APPROVAL,
             created_at: new Date().toISOString(),
-          };
-
-          await supabase.from("generated_posts").insert(postObj);
+          });
         }
       }
 
@@ -195,6 +232,7 @@ export class AutomationController {
     }
   };
 
+
   // 3. Create Draft Post (from n8n AI Agent)
   createDraft = async (req: AuthRequest, res: Response) => {
     try {
@@ -202,6 +240,20 @@ export class AutomationController {
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       let { content, trend_id } = req.body;
+      const targetPlatform =
+        (req.body.platform as Platform) || Platform.LINKEDIN;
+
+      // Quota check before generating
+      const quota = await this.checkQuota(user_id);
+      if (!quota.allowed) {
+        return res.status(403).json({
+          error: "Monthly generation quota exceeded.",
+          used: quota.used,
+          limit: quota.limit,
+          tier: quota.tier,
+          upgrade_url: `${process.env.FRONTEND_URL}/settings?tab=billing`,
+        });
+      }
 
       // Auto-generate if missing
       if (!content) {
@@ -219,21 +271,16 @@ export class AutomationController {
             .eq("id", user_id)
             .single();
 
-          content = await geminiService.generateDraft(
-            trend.topic,
-            trend.metadata?.insight || "No context",
-            userProfile, // Pass user context
+          content = await workflowService.generatePost(
+            { topic: trend.topic, platform: targetPlatform },
+            userProfile || undefined,
+            trend.metadata?.insight || "No context"
           );
         } else {
           content = "Draft generated from unknown trend.";
         }
       }
 
-      // Check config to see if approval is required
-      // Assuming platform is passed in body, or default to LinkedIn.
-      // Ideally n8n should send platform. Defaults to LinkedIn for now.
-      const targetPlatform =
-        (req.body.platform as Platform) || Platform.LINKEDIN;
 
       const { data: config } = await supabase
         .from("automation_configs")
@@ -294,7 +341,8 @@ export class AutomationController {
 
       res.json({ success: true, post: data });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[createDraft] Error:", error);
+      res.status(500).json({ error: error.message || String(error) || "Unknown Error" });
     }
   };
 
@@ -320,7 +368,8 @@ export class AutomationController {
       if (
         post.status !== PostStatus.APPROVED &&
         post.status !== PostStatus.SCHEDULED &&
-        post.status !== PostStatus.NEEDS_APPROVAL
+        post.status !== PostStatus.NEEDS_APPROVAL &&
+        post.status !== PostStatus.FAILED
       ) {
         return res
           .status(400)
@@ -328,14 +377,37 @@ export class AutomationController {
       }
 
       // Execute Posting via Service
-      const result = await linkedInService.createPost(user_id, post.content);
+      let resultId: string | null = null;
+      let platform = post.ai_metadata?.platform || "linkedin";
+
+      try {
+        if (platform === 'twitter') {
+          const tweetRes: any = await twitterService.postTweet(user_id, post.content);
+          resultId = tweetRes?.data?.id || tweetRes?.id || "twitter_unknown_id";
+        } else if (platform === 'instagram') {
+          const igId = await instagramService.postToInstagram(user_id, post.content, post.media_urls?.[0]);
+          resultId = igId;
+        } else if (platform === 'slack') {
+          const slackRes: any = await slackService.sendMessage(user_id, post.content);
+          resultId = slackRes?.ts || "slack_message_sent";
+        } else if (platform === 'reddit') {
+          const redditRes: any = await redditService.postToReddit(user_id, post.content);
+          resultId = redditRes?.url || "reddit_post_created";
+        } else {
+          // Default: LinkedIn
+          const liResult: any = await linkedInService.createPost(user_id, post.content, post.media_urls);
+          resultId = liResult?.platform_post_id || liResult?.id || null;
+        }
+      } catch (err: any) {
+        throw new Error(`Failed to post to ${platform}: ${err.message || "Unknown error"}`);
+      }
 
       // Update DB
       const { error: updateError } = await supabase
         .from("generated_posts")
         .update({
           status: PostStatus.PUBLISHED,
-          platform_post_id: result.id,
+          platform_post_id: resultId,
           published_at: new Date().toISOString(),
         })
         .eq("id", post_id);
@@ -349,7 +421,7 @@ export class AutomationController {
         message: `Published post ${post_id} to LinkedIn`,
       });
 
-      res.json({ success: true, platform_response: result });
+      res.json({ success: true, platform_response: { id: resultId, platform } });
     } catch (error: any) {
       await supabase
         .from("generated_posts")
@@ -359,12 +431,13 @@ export class AutomationController {
         user_id: req.body.user_id,
         action: "post_failed",
         level: LogLevel.ERROR,
-        message: error.message,
+        message: error.message || "Unknown error",
       });
 
+      console.error("[triggerPost] FATAL ERROR:", error);
+
       res.status(500).json({
-        error: error.message || "Unknown error occurred during posting",
-        details: error,
+        error: error.message || String(error) || "Unknown error occurred during posting",
       });
     }
   };
@@ -440,14 +513,53 @@ export class AutomationController {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      const { topic } = req.body;
+      const {
+        topic,
+        platform,
+        target_audience,
+        voice_preset,
+        length,
+        professionalism,
+        automated_hashtags,
+        vibe_check,
+        content_pillars,
+        primary_focus,
+        auto_generate_tags,
+        smart_description,
+      } = req.body;
+
       if (!topic) return res.status(400).json({ error: "Topic is required" });
 
-      // 1. Call n8n to generate content
-      // Lazy import to avoid circular dep issues if any, though service import is fine
-      // const { n8nService } = require('../services/n8n.service');
-      // We will assume n8nService is imported at top of file
-      const content = await n8nService.generatePost(topic);
+      // 0. Quota Check
+      const quota = await this.checkQuota(user_id);
+      if (!quota.allowed) {
+        return res.status(403).json({
+          error: "Monthly generation quota exceeded.",
+          used: quota.used,
+          limit: quota.limit,
+          tier: quota.tier,
+          upgrade_url: `${process.env.FRONTEND_URL}/settings?tab=billing`,
+        });
+      }
+
+      // 1. Call LangGraph Workflow to generate content
+      const content = await workflowService.generatePost(
+        {
+          topic,
+          platform: platform || "linkedin",
+          target_audience,
+          voice_preset,
+          length,
+          professionalism,
+          automated_hashtags,
+          vibe_check,
+          content_pillars,
+          primary_focus,
+          auto_generate_tags,
+          smart_description,
+        },
+        (req.user as Record<string, any>) || undefined
+      );
 
       // 2. Save as Draft
       const { data, error } = await supabase
@@ -472,13 +584,103 @@ export class AutomationController {
       });
 
       res.json({ success: true, post: data });
-    } catch (e: any) {
-      console.error("Manual generation failed:", e);
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "Manual generation failed";
+      console.error("Manual generation failed:", errMsg);
+      res.status(500).json({ error: errMsg });
     }
   };
 
-  // 7. Delete Post
+  // Quota Status Endpoint
+  getQuotaStatus = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+      const quota = await this.checkQuota(user_id);
+      return res.json({
+        used: quota.used,
+        limit: quota.limit === Infinity ? null : quota.limit,
+        tier: quota.tier,
+        remaining: quota.limit === Infinity ? null : Math.max(0, quota.limit - quota.used),
+        allowed: quota.allowed,
+      });
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "Quota check failed";
+      return res.status(500).json({ error: errMsg });
+    }
+  };
+
+
+  // 7. Retry Failed Post
+  retryPost = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      const { id } = req.params;
+
+      // Ensure post exists and belongs to user
+      const { data: post, error: fetchErr } = await supabase
+        .from("generated_posts")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user_id)
+        .single();
+
+      if (fetchErr || !post)
+        return res.status(404).json({ error: "Post not found" });
+      if (post.status !== PostStatus.FAILED)
+        return res.status(400).json({ error: "Post is not in a failed state" });
+
+      // Attempt re-publish
+      let resultId: string | null = null;
+      let platform = post.ai_metadata?.platform || "linkedin";
+
+      try {
+        if (platform === 'twitter') {
+          const tweetRes: any = await twitterService.postTweet(user_id, post.content);
+          resultId = tweetRes.data?.id || tweetRes.id || "twitter_unknown_id";
+        } else if (platform === 'instagram') {
+          const igId = await instagramService.postToInstagram(user_id, post.content, post.media_urls?.[0]);
+          resultId = igId;
+        } else {
+          const liResult: any = await linkedInService.createPost(user_id, post.content, post.media_urls);
+          resultId = liResult?.platform_post_id || liResult?.id || null;
+        }
+      } catch (err: any) {
+        throw new Error(`Failed to post to ${platform}: ${err.message || "Unknown error"}`);
+      }
+
+      await supabase
+        .from("generated_posts")
+        .update({
+          status: PostStatus.PUBLISHED,
+          platform_post_id: resultId,
+          published_at: new Date().toISOString(),
+          error_message: null,
+        })
+        .eq("id", id);
+
+      await supabase.from("automation_logs").insert({
+        user_id,
+        action: "post_retry_success",
+        level: LogLevel.SUCCESS,
+        message: `Retried and published post ${id}`,
+      });
+
+      return res.json({ success: true, message: "Post retried successfully" });
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "Retry failed";
+      const { id } = req.params;
+      await supabase
+        .from("generated_posts")
+        .update({ error_message: errMsg })
+        .eq("id", id);
+      return res.status(500).json({ error: errMsg });
+    }
+  };
+
+  // 8. Delete Post
   deletePost = async (req: AuthRequest, res: Response) => {
     try {
       const user_id = req.user?.id;
@@ -764,9 +966,9 @@ export class AutomationController {
         throw error;
       }
       res.json({ data, meta: { page, limit, total: count } });
-    } catch (e: any) {
+    } catch (e) {
       console.error("❌ getTrends Exception:", e);
-      res.status(500).json({ error: e.message, details: e });
+      res.status(500).json({ error: (e as Error).message });
     }
   };
 
@@ -798,8 +1000,8 @@ export class AutomationController {
 
       if (error) throw error;
       res.json({ data, meta: { page, limit, total: count } });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
     }
   };
 
@@ -946,6 +1148,42 @@ export class AutomationController {
   };
 
   // --- DEV TOOLS ---
+  
+  // --- VERCEL CRON ---
+  processCronJobs = async (req: Request, res: Response) => {
+    try {
+      // Vercel Cron sends a Bearer token in Authorization header
+      const authHeader = req.headers.authorization;
+      if (
+        process.env.CRON_SECRET &&
+        authHeader !== `Bearer ${process.env.CRON_SECRET}`
+      ) {
+        return res.status(401).json({ error: "Unauthorized cron request" });
+      }
+
+      await schedulerService.processScheduledPosts();
+      res.json({ success: true, message: "Scheduled posts processed" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+
+  processWeeklyDigestCron = async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (
+        process.env.CRON_SECRET &&
+        authHeader !== `Bearer ${process.env.CRON_SECRET}`
+      ) {
+        return res.status(401).json({ error: "Unauthorized cron request" });
+      }
+
+      await schedulerService.processWeeklyDigest();
+      res.json({ success: true, message: "Weekly digest processed" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
   seedData = async (req: Request, res: Response) => {
     try {
       if (process.env.NEWSDATA_API_KEY) {

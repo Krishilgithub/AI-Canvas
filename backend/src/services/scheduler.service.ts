@@ -1,6 +1,9 @@
 import * as cron from "node-cron";
 import { supabase } from "../db";
 import { linkedInService } from "./linkedin.service";
+import { twitterService } from "./twitter.service";
+import { slackService } from "./slack.service";
+import { redditService } from "./reddit.service";
 import { EmailService } from "./email.service";
 
 class SchedulerService {
@@ -24,15 +27,16 @@ class SchedulerService {
     if (this.weeklyJob) this.weeklyJob.stop();
   }
 
-  private processScheduledPosts = async () => {
+  public processScheduledPosts = async () => {
     try {
       const now = new Date().toISOString();
 
-      // 1. Fetch Due Posts
+      // Only fetch posts that: (1) are scheduled, (2) have a scheduled_time that has passed
       const { data: posts, error } = await supabase
         .from("generated_posts")
         .select("*")
         .eq("status", "scheduled")
+        .not("scheduled_time", "is", null)
         .lte("scheduled_time", now);
 
       if (error) {
@@ -42,9 +46,16 @@ class SchedulerService {
 
       if (!posts || posts.length === 0) return;
 
-      console.log(`⏰ Processing ${posts.length} due posts...`);
+      // Immediately lock all fetched posts to 'in_progress' to prevent double-processing
+      const postIds = posts.map((p: Record<string, string>) => p.id);
+      await supabase
+        .from("generated_posts")
+        .update({ status: "in_progress" })
+        .in("id", postIds)
+        .eq("status", "scheduled"); // guard: only update if still scheduled
 
-      // 2. Process Each Post
+      console.log(`[Scheduler] Processing ${posts.length} scheduled post(s)...`);
+
       for (const post of posts) {
         await this.publishPost(post);
       }
@@ -55,22 +66,25 @@ class SchedulerService {
 
   private publishPost = async (post: any) => {
     try {
-      // Publish (Service handles token fetching)
+      const platform = post.ai_metadata?.platform || "linkedin";
+      let resultId: string | null = null;
 
-      // Pass media_urls if they exist
-      const result = await linkedInService.createPost(
-        post.user_id,
-        post.content,
-        post.media_urls,
-      );
+      if (platform === "twitter") {
+        const tweetRes: any = await twitterService.postTweet(post.user_id, post.content);
+        resultId = tweetRes?.data?.id || "twitter_posted";
+      } else if (platform === "slack") {
+        const slackRes: any = await slackService.sendMessage(post.user_id, post.content);
+        resultId = slackRes?.ts || "slack_posted";
+      } else if (platform === "reddit") {
+        const redditRes: any = await redditService.postToReddit(post.user_id, post.content);
+        resultId = redditRes?.url || "reddit_posted";
+      } else {
+        // Default: LinkedIn
+        const result = await linkedInService.createPost(post.user_id, post.content, post.media_urls);
+        resultId = result?.platform_post_id || null;
+      }
 
-      // Update Success
-      await this.updateStatus(
-        post.id,
-        "published",
-        null,
-        result?.platform_post_id,
-      );
+      await this.updateStatus(post.id, "published", null, resultId ?? undefined);
     } catch (e: any) {
       console.error(`❌ Failed to publish post ${post.id}:`, e.message);
       await this.updateStatus(post.id, "failed", e.message);
@@ -88,13 +102,12 @@ class SchedulerService {
       .update({
         status,
         published_at: status === "published" ? new Date().toISOString() : null,
-        error_message: error,
         platform_post_id: platformId,
       })
       .eq("id", postId);
   };
 
-  private processWeeklyDigest = async () => {
+  public processWeeklyDigest = async () => {
     console.log("📧 Processing Weekly Digest...");
     try {
       // 1. Fetch users with digest enabled

@@ -32,8 +32,7 @@ router.get(
 router.get("/trends", requireAuth, controller.getTrends);
 router.post("/scan", requireAuth, controller.scanTrends); // Added missing route
 
-// n8n Webhooks / Triggers (Might need different auth for machine-to-machine, keeping requireAuth for now for safety)
-router.post("/ingest-trend", requireAuth, controller.ingestTrend);
+// Automation Triggers
 router.post(
   "/create-draft",
   requireAuth,
@@ -67,6 +66,7 @@ router.post(
   controller.createPost,
 );
 router.delete("/posts/:id", requireAuth, controller.deletePost);
+router.post("/posts/:id/retry", requireAuth, controller.retryPost);
 
 // Actions
 
@@ -74,13 +74,13 @@ router.delete("/posts/:id", requireAuth, controller.deletePost);
 router.get("/team", requireAuth, controller.getTeamMembers);
 router.post("/team/invite", requireAuth, controller.inviteTeamMember);
 router.delete("/team/:id", requireAuth, controller.removeTeamMember);
-router.post(
-  "/trigger-post",
-  requireAuth,
-  validate(triggerPostSchema),
-  controller.triggerPost,
-);
+router.post("/trigger-post", requireAuth, validate(triggerPostSchema), controller.triggerPost);
 router.post("/seed", requireAuth, controller.seedData);
 router.post("/generate-manual", requireAuth, controller.generateManualPost);
+router.get("/quota", requireAuth, controller.getQuotaStatus);
+
+// Vercel Cron endpoints (Auth handled inside via CRON_SECRET)
+router.get("/cron/process-posts", controller.processCronJobs);
+router.get("/cron/weekly-digest", controller.processWeeklyDigestCron);
 
 export default router;
