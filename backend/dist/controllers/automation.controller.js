@@ -31,7 +31,7 @@ class AutomationController {
             // 1. Get user tier
             const { data: user } = yield db_1.supabase
                 .from("users")
-                .select("subscription_tier")
+                .select("*")
                 .eq("id", user_id)
                 .single();
             const tier = ((user === null || user === void 0 ? void 0 : user.subscription_tier) || "free").toLowerCase();
@@ -234,7 +234,7 @@ class AutomationController {
                         // Fetch user profile for context
                         const { data: userProfile } = yield db_1.supabase
                             .from("profiles")
-                            .select("role, niche, goals, bio")
+                            .select("*")
                             .eq("id", user_id)
                             .single();
                         content = yield workflow_service_1.workflowService.generatePost({ topic: trend.topic, platform: targetPlatform }, userProfile || undefined, ((_b = trend.metadata) === null || _b === void 0 ? void 0 : _b.insight) || "No context");
@@ -245,7 +245,7 @@ class AutomationController {
                 }
                 const { data: config } = yield db_1.supabase
                     .from("automation_configs")
-                    .select("require_approval")
+                    .select("*")
                     .eq("user_id", user_id)
                     .eq("platform", targetPlatform)
                     .single();
@@ -271,7 +271,7 @@ class AutomationController {
                 if (status === constants_1.PostStatus.NEEDS_APPROVAL) {
                     const { data: profile } = yield db_1.supabase
                         .from("profiles")
-                        .select("notification_preferences, email")
+                        .select("*")
                         .eq("id", user_id)
                         .single();
                     if ((profile === null || profile === void 0 ? void 0 : profile.email) &&

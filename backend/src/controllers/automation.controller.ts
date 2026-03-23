@@ -30,7 +30,7 @@ export class AutomationController {
     // 1. Get user tier
     const { data: user } = await supabase
       .from("users")
-      .select("subscription_tier")
+      .select("*")
       .eq("id", user_id)
       .single();
 
@@ -272,7 +272,7 @@ export class AutomationController {
           // Fetch user profile for context
           const { data: userProfile } = await supabase
             .from("profiles")
-            .select("role, niche, goals, bio")
+            .select("*")
             .eq("id", user_id)
             .single();
 
@@ -289,7 +289,7 @@ export class AutomationController {
 
       const { data: config } = await supabase
         .from("automation_configs")
-        .select("require_approval")
+        .select("*")
         .eq("user_id", user_id)
         .eq("platform", targetPlatform)
         .single();
@@ -319,7 +319,7 @@ export class AutomationController {
       if (status === PostStatus.NEEDS_APPROVAL) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("notification_preferences, email")
+          .select("*")
           .eq("id", user_id)
           .single();
 
