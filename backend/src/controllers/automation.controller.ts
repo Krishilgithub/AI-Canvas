@@ -981,7 +981,7 @@ export class AutomationController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = (page - 1) * limit;
-      const { status } = req.query; // Removed platform destructuring
+      const { status, platform } = req.query; // Added platform parameter
 
       let query = supabase
         .from("generated_posts")
@@ -989,8 +989,21 @@ export class AutomationController {
 
       // Filters
       query = query.eq("user_id", user_id);
-      if (status) query = query.eq("status", status);
-      // if (platform) query = query.eq("platform", platform); // SKIPPED
+      
+      if (status) {
+        // Handle multiple statuses like "published,failed"
+        if (typeof status === 'string' && status.includes(',')) {
+          const statusList = status.split(',');
+          query = query.in("status", statusList);
+        } else {
+          query = query.eq("status", status);
+        }
+      }
+      
+      // JSONB Filter for target platform routing
+      if (platform) {
+        query = query.contains("ai_metadata", { platform });
+      }
 
       // Sorting & Pagination
       query = query
@@ -1139,7 +1152,7 @@ export class AutomationController {
 
       const { data } = await supabase
         .from("linked_accounts")
-        .select("platform, platform_username, status, connection_status")
+        .select("*")
         .eq("user_id", user_id);
 
       const mappedData = data?.map(d => ({

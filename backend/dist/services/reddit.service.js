@@ -19,7 +19,11 @@ class RedditService {
     constructor() {
         this.clientId = process.env.REDDIT_CLIENT_ID;
         this.clientSecret = process.env.REDDIT_CLIENT_SECRET;
-        this.redirectUri = `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/auth/reddit/callback`;
+    }
+    get redirectUri() {
+        const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+        const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+        return `${appUrl}/api/v1/auth/reddit/callback`;
     }
     getAuthUrl(state) {
         if (!this.clientId)

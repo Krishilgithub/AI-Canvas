@@ -21,6 +21,7 @@ const gemini_service_1 = require("../services/gemini.service");
 const workflow_service_1 = require("../services/workflow.service");
 const constants_1 = require("../constants");
 const email_service_1 = require("../services/email.service");
+const scheduler_service_1 = require("../services/scheduler.service");
 class AutomationController {
     constructor() {
         this.emailService = new email_service_1.EmailService();
@@ -183,6 +184,7 @@ class AutomationController {
                             content: draftContent,
                             trend_id: trend.id,
                             status: constants_1.PostStatus.NEEDS_APPROVAL,
+                            ai_metadata: { platform },
                             created_at: new Date().toISOString(),
                         });
                     }
@@ -255,7 +257,7 @@ class AutomationController {
                     content,
                     trend_id,
                     status,
-                    // platform: targetPlatform, // SKIPPED: DB Column missing
+                    ai_metadata: { platform: targetPlatform },
                     platform_post_id: null, // Not posted yet
                 })
                     .select()
@@ -854,7 +856,7 @@ class AutomationController {
             }
             catch (e) {
                 console.error("❌ getTrends Exception:", e);
-                res.status(500).json({ error: e.message, details: e });
+                res.status(500).json({ error: e.message });
             }
         });
         this.getPosts = (req, res) => __awaiter(this, void 0, void 0, function* () {
@@ -866,15 +868,26 @@ class AutomationController {
                 const page = parseInt(req.query.page) || 1;
                 const limit = parseInt(req.query.limit) || 10;
                 const offset = (page - 1) * limit;
-                const { status } = req.query; // Removed platform destructuring
+                const { status, platform } = req.query; // Added platform parameter
                 let query = db_1.supabase
                     .from("generated_posts")
                     .select("*", { count: "exact" });
                 // Filters
                 query = query.eq("user_id", user_id);
-                if (status)
-                    query = query.eq("status", status);
-                // if (platform) query = query.eq("platform", platform); // SKIPPED
+                if (status) {
+                    // Handle multiple statuses like "published,failed"
+                    if (typeof status === 'string' && status.includes(',')) {
+                        const statusList = status.split(',');
+                        query = query.in("status", statusList);
+                    }
+                    else {
+                        query = query.eq("status", status);
+                    }
+                }
+                // JSONB Filter for target platform routing
+                if (platform) {
+                    query = query.contains("ai_metadata", { platform });
+                }
                 // Sorting & Pagination
                 query = query
                     .order("created_at", { ascending: false })
@@ -1012,15 +1025,46 @@ class AutomationController {
                     return res.status(401).json({ error: "Unauthorized" });
                 const { data } = yield db_1.supabase
                     .from("linked_accounts")
-                    .select("platform, platform_username, status")
+                    .select("*")
                     .eq("user_id", user_id);
-                res.json(data || []);
+                const mappedData = (data === null || data === void 0 ? void 0 : data.map(d => (Object.assign(Object.assign({}, d), { status: d.status || d.connection_status })))) || [];
+                res.json(mappedData);
             }
             catch (e) {
                 res.status(500).json({ error: e.message });
             }
         });
         // --- DEV TOOLS ---
+        // --- VERCEL CRON ---
+        this.processCronJobs = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Vercel Cron sends a Bearer token in Authorization header
+                const authHeader = req.headers.authorization;
+                if (process.env.CRON_SECRET &&
+                    authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+                    return res.status(401).json({ error: "Unauthorized cron request" });
+                }
+                yield scheduler_service_1.schedulerService.processScheduledPosts();
+                res.json({ success: true, message: "Scheduled posts processed" });
+            }
+            catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+        this.processWeeklyDigestCron = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const authHeader = req.headers.authorization;
+                if (process.env.CRON_SECRET &&
+                    authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+                    return res.status(401).json({ error: "Unauthorized cron request" });
+                }
+                yield scheduler_service_1.schedulerService.processWeeklyDigest();
+                res.json({ success: true, message: "Weekly digest processed" });
+            }
+            catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
         this.seedData = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 if (process.env.NEWSDATA_API_KEY) {

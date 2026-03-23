@@ -20,20 +20,34 @@ const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = require("./swagger");
 // Load env vars
 dotenv_1.default.config();
-// Start Scheduler
-scheduler_service_1.schedulerService.start();
 const http_1 = __importDefault(require("http"));
 const socket_service_1 = require("./services/socket.service");
 // ... imports remain the same
-// Start Scheduler
-scheduler_service_1.schedulerService.start();
+// Start Scheduler only if not on Vercel
+if (process.env.VERCEL !== "1") {
+    scheduler_service_1.schedulerService.start();
+}
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+// Allow both localhost and the live Vercel domain explicitly to prevent CORS blocking from misconfigured envs
+const allowedOrigins = [FRONTEND_URL, "https://ai-canvass.vercel.app", "http://localhost:3000"];
 // Middleware
 app.use((0, cors_1.default)({
-    origin: FRONTEND_URL,
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            // As a fallback for vercel deployment branches, just allow it if we are on vercel
+            if (process.env.VERCEL === "1")
+                return callback(null, true);
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     credentials: true,
 }));
 app.use((0, helmet_1.default)());
@@ -43,8 +57,10 @@ app.use(express_1.default.json({
         req.rawBody = buf;
     },
 }));
-// Initialize Socket.IO
-socket_service_1.socketService.init(server, FRONTEND_URL);
+// Initialize Socket.IO only if not on Vercel
+if (process.env.VERCEL !== "1") {
+    socket_service_1.socketService.init(server, FRONTEND_URL);
+}
 // Routes
 app.use("/api/v1/automation", automation_routes_1.default);
 app.use("/api/v1/user", user_routes_1.default);
@@ -61,7 +77,11 @@ app.get("/health", (req, res) => {
 // Global Error Handler
 app.use(error_middleware_1.errorHandler);
 // Start Server (Listen on HTTP Server, not just Express App)
-server.listen(PORT, () => {
-    console.log(`🚀 Backend Server running on port ${PORT}`);
-    console.log(`📡 Environment: ${process.env.NODE_ENV || "development"}`);
-});
+if (process.env.VERCEL !== "1") {
+    server.listen(PORT, () => {
+        console.log(`🚀 Backend Server running on port ${PORT}`);
+        console.log(`📡 Environment: ${process.env.NODE_ENV || "development"}`);
+    });
+}
+// Export the express app for Vercel Serverless Functions
+exports.default = app;

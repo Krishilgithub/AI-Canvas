@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { ConfigurationPanel } from "@/components/reddit/configuration-panel";
 import { ContentApproval } from "@/components/reddit/content-approval";
+import { HistoryView } from "@/components/shared/history-view";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +75,7 @@ export default function RedditPage() {
       {activeTab === "overview" && <TrendsView />}
       {activeTab === "approval" && <ContentApproval />}
       {activeTab === "config" && <ConfigurationPanel />}
-      {activeTab === "logs" && <HistoryView />}
+      {activeTab === "logs" && <HistoryView platform="reddit" />}
     </div>
   );
 }
@@ -319,59 +320,3 @@ function TrendsView() {
   );
 }
 
-function HistoryView() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Reddit Automation History</CardTitle>
-        <CardDescription>Log of all interactions on Reddit.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {[
-            {
-              action: "Replied to thread 'Best AI Tools 2024' in r/saas",
-              time: "1 hour ago",
-              status: "Success",
-            },
-            {
-              action: "Posted 'How to scale your agency' in r/entrepreneur",
-              time: "4 hours ago",
-              status: "Success",
-            },
-            {
-              action: "Draft generation failed for topic 'LLMs'",
-              time: "Yesterday",
-              status: "Error",
-            },
-            {
-              action: "Subreddit scan completed (25 new threads)",
-              time: "Yesterday",
-              status: "Success",
-            },
-          ].map((log, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
-            >
-              <span className="font-medium text-sm">{log.action}</span>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-muted-foreground">{log.time}</span>
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded-full font-medium border",
-                    log.status === "Success"
-                      ? "bg-green-500/10 text-green-600 border-green-500/20"
-                      : "bg-red-500/10 text-red-600 border-red-500/20",
-                  )}
-                >
-                  {log.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}

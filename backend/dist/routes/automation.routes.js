@@ -40,4 +40,7 @@ router.post("/trigger-post", auth_middleware_1.requireAuth, (0, validation_middl
 router.post("/seed", auth_middleware_1.requireAuth, controller.seedData);
 router.post("/generate-manual", auth_middleware_1.requireAuth, controller.generateManualPost);
 router.get("/quota", auth_middleware_1.requireAuth, controller.getQuotaStatus);
+// Vercel Cron endpoints (Auth handled inside via CRON_SECRET)
+router.get("/cron/process-posts", controller.processCronJobs);
+router.get("/cron/weekly-digest", controller.processWeeklyDigestCron);
 exports.default = router;

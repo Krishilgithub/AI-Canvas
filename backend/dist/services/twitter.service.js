@@ -8,14 +8,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.twitterService = void 0;
 const twitter_api_v2_1 = require("twitter-api-v2");
 const db_1 = require("../db");
-const crypto_1 = __importDefault(require("crypto"));
 class TwitterService {
     constructor() {
         this.client = new twitter_api_v2_1.TwitterApi({
@@ -25,19 +21,17 @@ class TwitterService {
     }
     // 1. Generate Auth URL (OAuth2 PKCE)
     getAuthUrl(state) {
-        // Generate a secure code verifier and challenge
-        const codeVerifier = crypto_1.default.randomBytes(32).toString('base64url');
-        // In OAuth2 PKCE, we must store the codeVerifier temporarily to verify the callback.
-        // For simplicity without a session store in this context, we will append it to the state payload.
-        // Ideally this is stored in a secure server-side session.
+        const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+        const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+        // Let the library generate the secure code verifier and corresponding hashed challenge
+        const { url, codeVerifier } = this.client.generateOAuth2AuthLink(`${appUrl}/api/v1/auth/twitter/callback`, {
+            scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+        });
+        // We take their generated codeVerifier, and securely stash it in our base64 payload
         const decodedState = JSON.parse(Buffer.from(state, "base64").toString("ascii"));
         decodedState.cv = codeVerifier;
         const newState = Buffer.from(JSON.stringify(decodedState)).toString("base64");
-        const { url, codeVerifier: _cv, state: _s } = this.client.generateOAuth2AuthLink(`${process.env.APP_URL || 'http://localhost:4000'}/api/v1/auth/twitter/callback`, {
-            scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
-            state: newState,
-        });
-        // We override their generated state to pass our user_id + cv encoded state
+        // Override the URL's state with our custom payload
         const authUrl = new URL(url);
         authUrl.searchParams.set('state', newState);
         return authUrl.toString();
@@ -45,14 +39,17 @@ class TwitterService {
     // 2. Handle Callback and exchange code for tokens
     exchangeCodeForToken(code, codeVerifier, userId) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 if (!process.env.TWITTER_CLIENT_ID || !process.env.TWITTER_CLIENT_SECRET) {
                     throw new Error("Missing Twitter Developer Keys in environment variables.");
                 }
+                const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+                const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
                 const { client: loggedClient, accessToken, refreshToken, expiresIn } = yield this.client.loginWithOAuth2({
                     code,
                     codeVerifier,
-                    redirectUri: `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/auth/twitter/callback`,
+                    redirectUri: `${appUrl}/api/v1/auth/twitter/callback`,
                 });
                 // Save tokens to DB
                 yield db_1.supabase.from('linked_accounts').upsert({
@@ -66,8 +63,8 @@ class TwitterService {
                 return true;
             }
             catch (e) {
-                console.error('[Twitter OAuth Error]', e);
-                throw e;
+                console.error('[Twitter OAuth Error]', (e === null || e === void 0 ? void 0 : e.data) || (e === null || e === void 0 ? void 0 : e.message));
+                throw new Error(((_a = e === null || e === void 0 ? void 0 : e.data) === null || _a === void 0 ? void 0 : _a.error_description) || (e === null || e === void 0 ? void 0 : e.message) || "Failed to connect to Twitter");
             }
         });
     }
