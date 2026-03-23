@@ -14,28 +14,23 @@ class TwitterService {
 
   // 1. Generate Auth URL (OAuth2 PKCE)
   getAuthUrl(state: string) {
-    // Generate a secure code verifier and challenge
-    const codeVerifier = crypto.randomBytes(32).toString('base64url');
-    
-    // In OAuth2 PKCE, we must store the codeVerifier temporarily to verify the callback.
-    // For simplicity without a session store in this context, we will append it to the state payload.
-    // Ideally this is stored in a secure server-side session.
+    const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+    const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+
+    // Let the library generate the secure code verifier and corresponding hashed challenge
+    const { url, codeVerifier } = this.client.generateOAuth2AuthLink(
+      `${appUrl}/api/v1/auth/twitter/callback`,
+      {
+        scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+      }
+    );
+
+    // We take their generated codeVerifier, and securely stash it in our base64 payload
     const decodedState = JSON.parse(Buffer.from(state, "base64").toString("ascii"));
     decodedState.cv = codeVerifier;
     const newState = Buffer.from(JSON.stringify(decodedState)).toString("base64");
 
-    const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-    const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
-
-    const { url, codeVerifier: _cv, state: _s } = this.client.generateOAuth2AuthLink(
-      `${appUrl}/api/v1/auth/twitter/callback`,
-      {
-        scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
-        state: newState,
-      }
-    );
-
-    // We override their generated state to pass our user_id + cv encoded state
+    // Override the URL's state with our custom payload
     const authUrl = new URL(url);
     authUrl.searchParams.set('state', newState);
     return authUrl.toString();
