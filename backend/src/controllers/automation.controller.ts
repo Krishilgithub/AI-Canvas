@@ -205,6 +205,10 @@ export class AutomationController {
       // Auto-generate drafts for high-impact trends (impact_score > 0.70)
       for (const trend of savedTrends) {
         if (trend.velocity_score > 70) {
+          // Explicit throttling to respect free tier generation limits (15 RPM / 4 sec baseline).
+          // We pause for 3.5 seconds to space out the parallel burst sequence safely.
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+
           const draftContent = await workflowService.generatePost(
             { topic: trend.topic, platform: platform },
             userProfile || undefined,

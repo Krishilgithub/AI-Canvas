@@ -28,6 +28,7 @@ const analyzeNode = async (state: typeof WorkflowState.State) => {
     model: "gemini-2.5-flash",
     temperature: 0.7,
     apiKey: process.env.GEMINI_API_KEY,
+    maxRetries: 3,
   });
 
   const p = state.parameters || {};
@@ -46,6 +47,7 @@ const draftNode = async (state: typeof WorkflowState.State) => {
     model: "gemini-2.5-flash",
     temperature: 0.8,
     apiKey: process.env.GEMINI_API_KEY,
+    maxRetries: 3,
   });
 
   const p = state.parameters || {};
@@ -79,6 +81,7 @@ const formatNode = async (state: typeof WorkflowState.State) => {
       model: "gemini-2.5-flash",
       temperature: 0.3,
       apiKey: process.env.GEMINI_API_KEY,
+      maxRetries: 3,
     });
     const msg = new HumanMessage(`Add 3-5 highly relevant hashtags to this post, keeping the original text exactly the same.
     Only output the original text followed by the hashtags.

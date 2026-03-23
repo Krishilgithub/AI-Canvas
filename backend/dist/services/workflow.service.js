@@ -38,6 +38,7 @@ const analyzeNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
         model: "gemini-2.5-flash",
         temperature: 0.7,
         apiKey: process.env.GEMINI_API_KEY,
+        maxRetries: 3,
     });
     const p = state.parameters || {};
     const sysMsg = new messages_1.SystemMessage("You are an expert social media strategist.");
@@ -53,6 +54,7 @@ const draftNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
         model: "gemini-2.5-flash",
         temperature: 0.8,
         apiKey: process.env.GEMINI_API_KEY,
+        maxRetries: 3,
     });
     const p = state.parameters || {};
     const u = state.userContext || {};
@@ -80,6 +82,7 @@ const formatNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
             model: "gemini-2.5-flash",
             temperature: 0.3,
             apiKey: process.env.GEMINI_API_KEY,
+            maxRetries: 3,
         });
         const msg = new messages_1.HumanMessage(`Add 3-5 highly relevant hashtags to this post, keeping the original text exactly the same.
     Only output the original text followed by the hashtags.
