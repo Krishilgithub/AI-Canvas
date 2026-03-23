@@ -216,6 +216,7 @@ export class AutomationController {
             content: draftContent,
             trend_id: trend.id,
             status: PostStatus.NEEDS_APPROVAL,
+            ai_metadata: { platform },
             created_at: new Date().toISOString(),
           });
         }
@@ -302,7 +303,7 @@ export class AutomationController {
           content,
           trend_id,
           status,
-          // platform: targetPlatform, // SKIPPED: DB Column missing
+          ai_metadata: { platform: targetPlatform },
           platform_post_id: null, // Not posted yet
         })
         .select()
@@ -1138,10 +1139,15 @@ export class AutomationController {
 
       const { data } = await supabase
         .from("linked_accounts")
-        .select("platform, platform_username, status")
+        .select("platform, platform_username, status, connection_status")
         .eq("user_id", user_id);
 
-      res.json(data || []);
+      const mappedData = data?.map(d => ({
+        ...d,
+        status: d.status || d.connection_status
+      })) || [];
+
+      res.json(mappedData);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
