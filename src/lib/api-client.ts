@@ -38,16 +38,25 @@ export async function fetcher(url: string, options: RequestInit = {}) {
   });
 
   if (!res.ok) {
-    let error: Record<string, string> = {};
+    const text = await res.text().catch(() => "");
+    let error: any = {};
     try {
-      error = await res.json();
+      error = text ? JSON.parse(text) : {};
     } catch (e) {
-      error = { error: await res.text() };
+      error = { error: text || res.statusText };
     }
     console.error(`[API Fetcher Error] ${url}:`, error);
     throw new Error(error.error || "API Error");
   }
-  return res.json();
+  
+  // Also fix the success case reading if needed, though it's fine 
+  // since it's the only read on the success path.
+  const text = await res.text().catch(() => "");
+  try {
+     return text ? JSON.parse(text) : {};
+  } catch(e) {
+     return text;
+  }
 }
 
 export async function poster(url: string, body: any = {}) {
@@ -59,17 +68,19 @@ export async function poster(url: string, body: any = {}) {
   });
 
   if (!res.ok) {
+    const text = await res.text().catch(() => "");
     let error: any = {};
     try {
-      error = await res.json();
+      error = text ? JSON.parse(text) : {};
     } catch (e) {
-      const text = await res.text().catch(() => "");
       error = { error: text || res.statusText };
     }
     console.error(`[API Poster Error] ${url}:`, JSON.stringify(error) === '{}' ? 'Empty Error Object' : error);
     throw new Error(error.error || "API Error");
   }
-  return res.json();
+  
+  const text = await res.text().catch(() => "");
+  try { return text ? JSON.parse(text) : {}; } catch(e) { return text; }
 }
 
 export async function puter(url: string, body: any = {}) {
@@ -81,10 +92,13 @@ export async function puter(url: string, body: any = {}) {
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
+    const text = await res.text().catch(() => "");
+    let error: any = {};
+    try { error = text ? JSON.parse(text) : {}; } catch(e) { error = { error: text || res.statusText }; }
     throw new Error(error.error || "API Error");
   }
-  return res.json();
+  const text = await res.text().catch(() => "");
+  try { return text ? JSON.parse(text) : {}; } catch(e) { return text; }
 }
 
 export async function remover(url: string) {
@@ -95,8 +109,11 @@ export async function remover(url: string) {
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
+    const text = await res.text().catch(() => "");
+    let error: any = {};
+    try { error = text ? JSON.parse(text) : {}; } catch(e) { error = { error: text || res.statusText }; }
     throw new Error(error.error || "API Error");
   }
-  return res.json();
+  const text = await res.text().catch(() => "");
+  try { return text ? JSON.parse(text) : {}; } catch(e) { return text; }
 }

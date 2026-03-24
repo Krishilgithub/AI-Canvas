@@ -50,16 +50,10 @@ export const getConfigSchema = z.object({
 export const getPostsSchema = z.object({
   query: z.object({
     user_id: z.string().uuid().optional(),
-    status: z
-      .enum([
-        "draft",
-        "scheduled",
-        "published",
-        "failed",
-        "needs_approval",
-        "approved",
-      ])
-      .optional(),
+    status: z.string().optional(),
+    platform: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
   }),

@@ -10,6 +10,7 @@ import { poster, puter, remover } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { socketClient } from "@/lib/socket-client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export function CreatePostModal({ isOpen, onClose, initialDate, postToEdit, onSu
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [platform, setPlatform] = useState<string>("linkedin");
 
   // Socket Connection
   useEffect(() => {
@@ -100,6 +102,11 @@ export function CreatePostModal({ isOpen, onClose, initialDate, postToEdit, onSu
             setScheduledTime(formatDateTimeLocal(date));
         }
         setMediaUrls(postToEdit.media_urls || []);
+        if (postToEdit.ai_metadata?.platform) {
+            setPlatform(postToEdit.ai_metadata.platform);
+        } else {
+            setPlatform("linkedin");
+        }
     } else if (initialDate) {
         setContent("");
         const date = new Date(initialDate);
@@ -175,6 +182,7 @@ export function CreatePostModal({ isOpen, onClose, initialDate, postToEdit, onSu
             content,
             scheduled_time: new Date(scheduledTime).toISOString(),
             status: 'scheduled',
+            platform, // Added Platform
             media_urls: mediaUrls
         };
 
@@ -247,6 +255,26 @@ export function CreatePostModal({ isOpen, onClose, initialDate, postToEdit, onSu
                             {typingUsers.join(', ')} is typing...
                         </p>
                     )}
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">
+                    Target Platform
+                </label>
+                <div className="relative">
+                    <Select value={platform} onValueChange={setPlatform}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Platform" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="linkedin">LinkedIn</SelectItem>
+                            <SelectItem value="twitter">Twitter / X</SelectItem>
+                            <SelectItem value="instagram">Instagram</SelectItem>
+                            <SelectItem value="reddit">Reddit</SelectItem>
+                            <SelectItem value="slack">Slack</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 

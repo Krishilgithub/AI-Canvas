@@ -452,18 +452,25 @@ export class AutomationController {
     try {
       const user_id = req.user?.id;
       const { id } = req.params;
-      const { content, scheduled_time } = req.body;
+      const { content, scheduled_time, platform } = req.body;
 
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      // Build update payload
+      const payload: any = {
+        content,
+        scheduled_time,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (platform) {
+        payload.ai_metadata = { platform };
+      }
 
       // Real update
       const { data, error } = await supabase
         .from("generated_posts")
-        .update({
-          content,
-          scheduled_time,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", id)
         .eq("user_id", user_id) // Security check
         .select()
@@ -484,7 +491,7 @@ export class AutomationController {
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       console.log(`[CREATE_POST] Attempting to create for User ID: ${user_id}`);
-      const { content, scheduled_time, status, trend_id, media_urls } =
+      const { content, scheduled_time, status, trend_id, media_urls, platform } =
         req.body;
 
       console.log("[CREATE_POST] Inserting into Real DB...");
@@ -497,6 +504,7 @@ export class AutomationController {
           status,
           trend_id,
           media_urls, // Added
+          ai_metadata: platform ? { platform } : undefined,
         })
         .select()
         .single();
@@ -985,7 +993,7 @@ export class AutomationController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = (page - 1) * limit;
-      const { status, platform } = req.query; // Added platform parameter
+      const { status, platform, startDate, endDate } = req.query; // Added date filters
 
       let query = supabase
         .from("generated_posts")
@@ -1005,8 +1013,16 @@ export class AutomationController {
       }
       
       // JSONB Filter for target platform routing
-      if (platform) {
+      if (platform && platform !== "all") {
         query = query.contains("ai_metadata", { platform });
+      }
+
+      // Date Range Filter
+      if (startDate) {
+        query = query.gte("scheduled_time", startDate);
+      }
+      if (endDate) {
+        query = query.lte("scheduled_time", endDate);
       }
 
       // Sorting & Pagination
