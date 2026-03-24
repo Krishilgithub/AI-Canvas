@@ -30,9 +30,16 @@ export async function getAuthToken() {
   return session?.access_token || null;
 }
 
+function getFullUrl(url: string) {
+  if (url.startsWith("/api/v1/")) {
+    return API_BASE.replace("/api/v1/automation", "") + url;
+  }
+  return `${API_BASE}${url}`;
+}
+
 export async function fetcher(url: string, options: RequestInit = {}) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(getFullUrl(url), {
     ...options,
     headers: { ...headers, ...(options.headers as Record<string, string> || {}) },
   });
@@ -61,7 +68,7 @@ export async function fetcher(url: string, options: RequestInit = {}) {
 
 export async function poster(url: string, body: any = {}) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(getFullUrl(url), {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -85,7 +92,7 @@ export async function poster(url: string, body: any = {}) {
 
 export async function puter(url: string, body: any = {}) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(getFullUrl(url), {
     method: "PUT",
     headers,
     body: JSON.stringify(body),
@@ -103,7 +110,7 @@ export async function puter(url: string, body: any = {}) {
 
 export async function remover(url: string) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(getFullUrl(url), {
     method: "DELETE",
     headers,
   });
