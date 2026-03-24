@@ -15,8 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Sparkles, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-
-const WEBHOOK_URL = "http://localhost:5678/webhook/draft_post";
+import { poster } from "@/lib/api-client";
 
 const TONE_OPTIONS = [
   { value: "professional", label: "Professional" },
@@ -46,6 +45,7 @@ export function ManualPostGenerator({
   const [keywords, setKeywords] = useState("");
   const [tone, setTone] = useState("thought_leader");
   const [style, setStyle] = useState("educational");
+  const [platform, setPlatform] = useState("linkedin");
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerate = async () => {
@@ -62,46 +62,36 @@ export function ManualPostGenerator({
         .map((k) => k.trim())
         .filter((k) => k);
 
-      // Prepare payload for webhook
       const payload = {
         topic: topic.trim(),
         target_audience: targetAudience.trim() || "General audience",
         keywords: keywordArray,
+        platform,
         tone,
         style,
         timestamp: new Date().toISOString(),
       };
 
-      console.log("Sending to webhook:", WEBHOOK_URL, payload);
+      console.log("Sending to native backend generate-manual", payload);
 
-      // Send to n8n webhook
-      const response = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await poster("/generate-manual", payload);
 
-      if (response.ok) {
-        toast.success("Draft post request sent successfully!");
-        // Reset form
+      if (response && response.success) {
+        toast.success("Draft post generated successfully!");
         setTopic("");
         setTargetAudience("");
         setKeywords("");
         setTone("thought_leader");
         setStyle("educational");
+        setPlatform("linkedin");
 
         if (onPostGenerated) onPostGenerated();
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        toast.error(
-          "Failed to send request: " + (errorData.error || "Unknown error"),
-        );
+        toast.error("Failed to send request");
       }
     } catch (error: any) {
-      toast.error("Error connecting to automation service");
-      console.error("Webhook error:", error);
+      toast.error(error.message || "Error connecting to automation service");
+      console.error("Generator error:", error);
     } finally {
       setIsGenerating(false);
     }
@@ -128,6 +118,22 @@ export function ManualPostGenerator({
               disabled={isGenerating}
               className="bg-background"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="platform">Target Platform</Label>
+            <Select value={platform} onValueChange={setPlatform} disabled={isGenerating}>
+              <SelectTrigger id="platform" className="bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="linkedin">LinkedIn</SelectItem>
+                <SelectItem value="twitter">Twitter / X</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="reddit">Reddit</SelectItem>
+                <SelectItem value="slack">Slack</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Target Audience */}
@@ -222,8 +228,7 @@ export function ManualPostGenerator({
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            This will trigger an AI agent via n8n to research and write a post
-            draft for you.
+            This will trigger our native LangGraph AI agent to research and write a post draft for you.
           </p>
         </div>
       </CardContent>

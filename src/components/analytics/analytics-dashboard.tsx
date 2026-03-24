@@ -4,27 +4,45 @@ import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
-import { ArrowUp, ArrowDown, Activity, Users, MousePointer2 } from "lucide-react";
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import { ArrowUp, ArrowDown, Activity, Users, MousePointer2, Loader2, Database } from "lucide-react";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function AnalyticsDashboard() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState(30);
+  const [platform, setPlatform] = useState("all");
+  const [seeding, setSeeding] = useState(false);
 
-  useEffect(() => {
+  const loadData = () => {
     setLoading(true);
-    fetcher(`/analytics?days=${timeRange}`)
+    fetcher(`/analytics?days=${timeRange}&platform=${platform}`)
       .then((res) => {
         setData(res.data || []);
       })
-      .catch((e) => {
-        console.error(e);
+      .catch((err) => {
+        console.error(err);
         toast.error("Failed to load analytics");
       })
       .finally(() => setLoading(false));
-  }, [timeRange]);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [timeRange, platform]);
+
+  const handleSeed = () => {
+    setSeeding(true);
+    fetcher(`/api/v1/analytics/seed`, { method: "POST" })
+      .then((res) => {
+        toast.success(res.message || "Data seeded successfully");
+        loadData();
+      })
+      .catch(() => toast.error("Failed to seed data"))
+      .finally(() => setSeeding(false));
+  };
 
   // Calculate Aggregates
   const totalImpressions = data.reduce((acc, curr) => acc + curr.impressions, 0);
@@ -66,7 +84,7 @@ export function AnalyticsDashboard() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         toast.success("Export downloaded");
-    } catch (e) {
+    } catch (err) {
         toast.error("Failed to export data");
     }
   };
@@ -77,6 +95,25 @@ export function AnalyticsDashboard() {
       <div className="flex justify-between items-center">
          <h2 className="text-xl font-semibold">Analytics Overview</h2>
          <div className="flex gap-2">
+             {!loading && totalImpressions === 0 && (
+                 <Button variant="outline" size="sm" onClick={handleSeed} disabled={seeding}>
+                     {seeding ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                     Generate Mock Data
+                 </Button>
+             )}
+             <Select value={platform} onValueChange={setPlatform}>
+                <SelectTrigger className="h-9 w-[140px]">
+                   <SelectValue placeholder="Platform" />
+                </SelectTrigger>
+                <SelectContent>
+                   <SelectItem value="all">All Platforms</SelectItem>
+                   <SelectItem value="linkedin">LinkedIn</SelectItem>
+                   <SelectItem value="twitter">Twitter / X</SelectItem>
+                   <SelectItem value="instagram">Instagram</SelectItem>
+                   <SelectItem value="reddit">Reddit</SelectItem>
+                   <SelectItem value="slack">Slack</SelectItem>
+                </SelectContent>
+             </Select>
              <Button variant="outline" size="sm" onClick={handleExport}>
                  <ArrowUp className="h-4 w-4 mr-2 rotate-45" /> Export CSV
              </Button>
@@ -171,7 +208,13 @@ export function AnalyticsDashboard() {
   );
 }
 
-function StatsCard({ title, value, icon, trend, trendNegative }: any) {
+export function StatsCard({ title, value, icon, trend, trendNegative }: {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  trend: string;
+  trendNegative?: boolean;
+}) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -404,6 +404,9 @@ export class AutomationController {
           resultId = liResult?.platform_post_id || liResult?.id || null;
         }
       } catch (err: any) {
+        if (err.message && err.message.toLowerCase().includes("not connected")) {
+            return res.status(400).json({ error: `Please integrate your ${platform} account in Settings to publish posts. (${err.message})` });
+        }
         throw new Error(`Failed to post to ${platform}: ${err.message || "Unknown error"}`);
       }
 
@@ -581,7 +584,7 @@ export class AutomationController {
           user_id,
           content,
           status: PostStatus.NEEDS_APPROVAL,
-          ai_metadata: { source: "manual_n8n", topic },
+          ai_metadata: { source: "manual_n8n", topic, platform: platform || "linkedin" },
         })
         .select()
         .single();
@@ -822,7 +825,7 @@ export class AutomationController {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      const { days = 30 } = req.query;
+      const { days = 30, platform } = req.query;
       const limit = parseInt(days as string) || 30;
 
       const startDate = new Date();
@@ -831,12 +834,18 @@ export class AutomationController {
       // Aggregate by date (in case multiple accounts)
       // Since Supabase doesn't do 'group by' easily via JS client without RPC sometimes,
       // we fetch all rows and aggregate in JS for MVP.
-      const { data, error } = await supabase
+      let query = supabase
         .from("analytics_daily")
         .select("date, impressions, clicks, likes, comments, shares")
         .eq("user_id", user_id)
         .gte("date", startDate.toISOString().split("T")[0])
         .order("date", { ascending: true });
+
+      if (platform && platform !== "all") {
+        query = query.eq("platform", platform as string);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Analytics fetch error:", error);
