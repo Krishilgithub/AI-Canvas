@@ -18,4 +18,7 @@ router.get(
   userController.getSubscription,
 );
 
+// Account Deletion
+router.delete("/profile", requireAuth, userController.deleteAccount);
+
 export default router;

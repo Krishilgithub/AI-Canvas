@@ -95,6 +95,7 @@ export default function SettingsPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -138,6 +139,22 @@ export default function SettingsPage() {
       toast.success("Profile saved.");
     } catch { toast.error("Failed to save."); }
     finally { setSaving(false); }
+  };
+
+  const deleteAccount = async () => {
+    try {
+      setSaving(true);
+      await deleter("/user/profile");
+      // Import isn't loaded locally so we simulate sign out by clearing storage
+      localStorage.clear();
+      toast.success("Account permanently deleted.");
+      setTimeout(() => { window.location.href = "/login"; }, 1000);
+    } catch {
+      toast.error("Failed to delete account. Please try again.");
+    } finally {
+      setSaving(false);
+      setDeleteModalOpen(false);
+    }
   };
 
   const generateApiKey = async () => {
@@ -242,7 +259,8 @@ export default function SettingsPage() {
 
           {/* ═══ PROFILE ═══════════════════════════════════════════════════ */}
           {activeSection === "profile" && (
-            <div className="bg-card rounded-2xl border border-border shadow-sm">
+            <>
+              <div className="bg-card rounded-2xl border border-border shadow-sm">
               {/* Avatar / name hero */}
               <div className="p-6 border-b border-border/50">
                 <div className="flex items-center gap-5">
@@ -304,6 +322,42 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Danger Zone */}
+            <div className="mt-8 bg-card rounded-2xl border border-red-500/30 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-red-500/10 bg-red-500/5">
+                <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" /> Danger Zone
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Once you delete your account, there is no going back. All of your data will be permanently wiped.
+                </p>
+              </div>
+              <div className="p-6 flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Permanently delete account</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    This action deletes your posts, integrations, active subscription, and profile forever.
+                  </p>
+                </div>
+                
+                {/* Delete Confirmation Modal */}
+                <ConfirmDialog 
+                  title="Are you absolutely sure?"
+                  description="This action cannot be undone. This will permanently delete your account and remove your active integrations and scheduled posts from our servers."
+                  confirmLabel={saving ? "Deleting..." : "Permanently Delete"}
+                  destructive
+                  onConfirm={deleteAccount}
+                >
+                  {(open) => (
+                    <Button variant="destructive" onClick={open} disabled={saving}>
+                      Delete Account
+                    </Button>
+                  )}
+                </ConfirmDialog>
+              </div>
+            </div>
+          </>
           )}
 
           {/* ═══ BILLING ══════════════════════════════════════════════════ */}

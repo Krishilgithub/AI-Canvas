@@ -33,6 +33,11 @@ router.get("/reddit/connect", requireAuth, authController.getRedditAuthUrl);
 router.get("/reddit/callback", authController.handleRedditCallback);
 router.delete("/reddit", requireAuth, authController.disconnectReddit);
 
+// --- YOUTUBE ---
+router.get("/youtube/connect", requireAuth, authController.getYouTubeAuthUrl);
+router.get("/youtube/callback", authController.handleYouTubeCallback);
+router.delete("/youtube", requireAuth, authController.disconnectYouTube);
+
 // --- GENERIC / FALLBACK ---
 // Connect: GET /api/v1/auth/:platform/connect
 router.get("/:platform/connect", requireAuth, authController.connectPlatform);

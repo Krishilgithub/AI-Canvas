@@ -6,6 +6,7 @@ import { slackService } from "./slack.service";
 import { redditService } from "./reddit.service";
 import { EmailService } from "./email.service";
 import { PLATFORM_CHAR_LIMITS } from "../middleware/validation.middleware";
+import { socketService } from "./socket.service";
 
 class SchedulerService {
   private job: cron.ScheduledTask | null = null;
@@ -307,6 +308,42 @@ class SchedulerService {
     error?: string | null,
     platformId?: string,
   ) => {
+    // Create an in-app notification before updating the status
+    if (status === "failed" || status === "published") {
+      try {
+        const { data: post } = await supabase
+          .from("generated_posts")
+          .select("user_id, ai_metadata")
+          .eq("id", postId)
+          .single();
+
+        if (post) {
+          const user_id = post.user_id;
+          const platform = (post.ai_metadata as any)?.platform || "unknown";
+
+          const notification = {
+            user_id,
+            type: status === "failed" ? "post_failed" : "automation_success",
+            title: status === "failed" ? "Post failed to publish" : "Post published successfully",
+            message: status === "failed" ? (error || "Unknown error") : `Your post was successfully published to ${platform}.`,
+            metadata: { platform, postId },
+          };
+
+          const { data: inserted } = await supabase
+            .from("notifications")
+            .insert(notification)
+            .select()
+            .single();
+
+          if (inserted) {
+            socketService.pushNotification(user_id, inserted);
+          }
+        }
+      } catch (err) {
+        console.error("[Scheduler] Failed to create notification:", err);
+      }
+    }
+
     await supabase
       .from("generated_posts")
       .update({

@@ -26,6 +26,10 @@ router.delete("/slack", auth_middleware_1.requireAuth, auth_controller_1.authCon
 router.get("/reddit/connect", auth_middleware_1.requireAuth, auth_controller_1.authController.getRedditAuthUrl);
 router.get("/reddit/callback", auth_controller_1.authController.handleRedditCallback);
 router.delete("/reddit", auth_middleware_1.requireAuth, auth_controller_1.authController.disconnectReddit);
+// --- YOUTUBE ---
+router.get("/youtube/connect", auth_middleware_1.requireAuth, auth_controller_1.authController.getYouTubeAuthUrl);
+router.get("/youtube/callback", auth_controller_1.authController.handleYouTubeCallback);
+router.delete("/youtube", auth_middleware_1.requireAuth, auth_controller_1.authController.disconnectYouTube);
 // --- GENERIC / FALLBACK ---
 // Connect: GET /api/v1/auth/:platform/connect
 router.get("/:platform/connect", auth_middleware_1.requireAuth, auth_controller_1.authController.connectPlatform);

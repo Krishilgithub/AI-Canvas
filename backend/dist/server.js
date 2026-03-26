@@ -14,10 +14,13 @@ const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const analytics_routes_1 = __importDefault(require("./routes/analytics.routes"));
 const post_routes_1 = __importDefault(require("./routes/post.routes"));
 const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
+const keys_routes_1 = __importDefault(require("./routes/keys.routes"));
+const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const error_middleware_1 = require("./middleware/error.middleware");
 const scheduler_service_1 = require("./services/scheduler.service");
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = require("./swagger");
+const rate_limit_middleware_1 = require("./middleware/rate-limit.middleware");
 // Load env vars
 dotenv_1.default.config();
 const http_1 = __importDefault(require("http"));
@@ -31,32 +34,38 @@ const app = (0, express_1.default)();
 const server = http_1.default.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
-// Allow both localhost and the live Vercel domain explicitly to prevent CORS blocking from misconfigured envs
-const allowedOrigins = [FRONTEND_URL, "https://ai-canvass.vercel.app", "http://localhost:3000"];
+// FIX: Removed Vercel production CORS wildcard bypass (`if VERCEL===1 return true`).
+// Now uses an explicit allowlist in ALL environments.
+const allowedOrigins = [
+    FRONTEND_URL,
+    "https://ai-canvass.vercel.app",
+    "http://localhost:3000",
+    process.env.NEXT_PUBLIC_FRONTEND_URL,
+].filter(Boolean);
 // Middleware
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
         if (!origin)
             return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            // As a fallback for vercel deployment branches, just allow it if we are on vercel
-            if (process.env.VERCEL === "1")
-                return callback(null, true);
-            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
-        }
-        return callback(null, true);
+        if (allowedOrigins.includes(origin))
+            return callback(null, true);
+        // FIX: No more wildcard for Vercel previews — explicit list only
+        return callback(new Error(`Origin "${origin}" is not allowed by CORS policy`), false);
     },
     credentials: true,
 }));
 app.use((0, helmet_1.default)());
-app.use((0, morgan_1.default)("dev"));
+// FIX: Use 'combined' (Apache format, no body logging) in production; 'dev' only locally
+app.use((0, morgan_1.default)(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express_1.default.json({
     verify: (req, res, buf) => {
         req.rawBody = buf;
     },
 }));
+// FIX: Apply rate limiting — BEFORE routes so all traffic is limited
+app.use("/api/v1", rate_limit_middleware_1.generalLimiter);
+app.use("/api/v1/auth", rate_limit_middleware_1.authLimiter);
 // Initialize Socket.IO only if not on Vercel
 if (process.env.VERCEL !== "1") {
     socket_service_1.socketService.init(server, FRONTEND_URL);
@@ -68,6 +77,11 @@ app.use("/api/v1/analytics", analytics_routes_1.default);
 app.use("/api/v1/posts", post_routes_1.default);
 app.use("/api/v1/payment", payment_routes_1.default);
 app.use("/api/v1/auth", auth_routes_1.default);
+app.use("/api/v1/keys", keys_routes_1.default);
+app.use("/api/v1/notifications", notification_routes_1.default);
+// FIX: Apply AI rate limiter specifically to expensive Gemini endpoints
+app.use("/api/v1/automation/scan", rate_limit_middleware_1.aiLimiter);
+app.use("/api/v1/automation/create-draft", rate_limit_middleware_1.aiLimiter);
 // Swagger Documentation
 app.use("/api-docs", swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.swaggerSpec));
 // Health Check

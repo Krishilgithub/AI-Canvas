@@ -12,71 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.linkedInService = exports.RealLinkedInService = exports.MockLinkedInService = void 0;
+exports.linkedInService = exports.LinkedInService = void 0;
 const constants_1 = require("../constants");
 const db_1 = require("../db");
 const axios_1 = __importDefault(require("axios"));
-class MockLinkedInService {
-    getAuthUrl(state) {
-        return `http://localhost:3000/api/auth/callback/linkedin?code=mock_code_123&state=${state}`;
-    }
-    connectAccount(userId, authCode) {
-        return __awaiter(this, void 0, void 0, function* () {
-            console.log(`[MOCK] Connecting LinkedIn account for user ${userId} with code ${authCode}`);
-            // Simulate API delay
-            yield new Promise((resolve) => setTimeout(resolve, 1500));
-            // Return mock token data
-            const mockData = {
-                user_id: userId,
-                platform: constants_1.Platform.LINKEDIN,
-                platform_user_id: `urn:li:person:MOCK_${Math.random().toString(36).substring(7)}`,
-                platform_username: "Mock User",
-                access_token: "mock_access_token_" + Date.now(),
-                refresh_token: "mock_refresh_token_" + Date.now(),
-                status: "connected",
-                token_expires_at: new Date(Date.now() + 3600 * 1000 * 60).toISOString(), // 60 days
-            };
-            // Store in DB
-            const { data, error } = yield db_1.supabase
-                .from("linked_accounts")
-                .upsert(mockData, { onConflict: "user_id, platform" })
-                .select()
-                .single();
-            if (error)
-                throw new Error(error.message);
-            return data;
-        });
-    }
-    getProfile(userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // Return connection status from DB
-            const { data } = yield db_1.supabase
-                .from("linked_accounts")
-                .select("*")
-                .eq("user_id", userId)
-                .eq("platform", constants_1.Platform.LINKEDIN)
-                .single();
-            return data || null;
-        });
-    }
-    createPost(userId_1, content_1) {
-        return __awaiter(this, arguments, void 0, function* (userId, content, mediaUrls = []) {
-            yield new Promise((resolve) => setTimeout(resolve, 2000));
-            // Simulate success
-            return {
-                success: true,
-                platform_post_id: `urn:li:share:MOCK_${Date.now()}`,
-                url: `https://linkedin.com/feed/update/urn:li:share:MOCK_${Date.now()}`,
-            };
-        });
-    }
-}
-exports.MockLinkedInService = MockLinkedInService;
-// Real Implementation
-class RealLinkedInService {
+class LinkedInService {
     constructor() {
-        this.clientId = process.env.LINKEDIN_CLIENT_ID;
-        this.clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+        this.clientId = process.env.LINKEDIN_CLIENT_ID || "";
+        this.clientSecret = process.env.LINKEDIN_CLIENT_SECRET || "";
     }
     get redirectUri() {
         const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
@@ -148,15 +91,34 @@ class RealLinkedInService {
             return data || null;
         });
     }
+    _refreshAccessToken(userId, refreshToken) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const params = new URLSearchParams();
+            params.append("grant_type", "refresh_token");
+            params.append("refresh_token", refreshToken);
+            params.append("client_id", this.clientId);
+            params.append("client_secret", this.clientSecret);
+            const refreshRes = yield axios_1.default.post("https://www.linkedin.com/oauth/v2/accessToken", params, {
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            });
+            const newAccessToken = refreshRes.data.access_token;
+            const newExpiresIn = refreshRes.data.expires_in;
+            yield db_1.supabase.from("linked_accounts").update({
+                access_token: newAccessToken,
+                token_expires_at: new Date(Date.now() + newExpiresIn * 1000).toISOString(),
+            }).eq("user_id", userId).eq("platform", constants_1.Platform.LINKEDIN);
+            return { accessToken: newAccessToken, expiresIn: newExpiresIn };
+        });
+    }
     createPost(userId_1, content_1) {
         return __awaiter(this, arguments, void 0, function* (userId, content, mediaUrls = []) {
-            var _a, _b, _c, _d, _e, _f, _g;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
             // Fetch user account
             const { data: account } = yield db_1.supabase
-                .from("linked_accounts")
-                .select("access_token, platform_user_id")
-                .eq("user_id", userId)
-                .eq("platform", constants_1.Platform.LINKEDIN)
+                .from('linked_accounts')
+                .select('access_token, refresh_token, platform_user_id')
+                .eq('user_id', userId)
+                .eq('platform', constants_1.Platform.LINKEDIN)
                 .single();
             if (!account || !account.access_token)
                 throw new Error("LinkedIn account not connected");
@@ -191,8 +153,45 @@ class RealLinkedInService {
                 };
             }
             catch (error) {
-                console.error("[LinkedIn API Error]:", ((_b = error.response) === null || _b === void 0 ? void 0 : _b.data) || error.message);
-                const errMsg = ((_d = (_c = error.response) === null || _c === void 0 ? void 0 : _c.data) === null || _d === void 0 ? void 0 : _d.message) || "";
+                // Token expiration / Unauthorized handler
+                if (((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) === 401 && account.refresh_token) {
+                    console.log(`[LinkedIn] Token expired for user ${userId}. Attempting refresh...`);
+                    try {
+                        const params = new URLSearchParams();
+                        params.append("grant_type", "refresh_token");
+                        params.append("refresh_token", account.refresh_token);
+                        params.append("client_id", this.clientId);
+                        params.append("client_secret", this.clientSecret);
+                        const refreshRes = yield axios_1.default.post("https://www.linkedin.com/oauth/v2/accessToken", params, {
+                            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        });
+                        const newAccessToken = refreshRes.data.access_token;
+                        const newExpiresIn = refreshRes.data.expires_in;
+                        yield db_1.supabase.from("linked_accounts").update({
+                            access_token: newAccessToken,
+                            expires_at: new Date(Date.now() + newExpiresIn * 1000).toISOString(),
+                        }).eq("user_id", userId).eq("platform", constants_1.Platform.LINKEDIN);
+                        // Retry post
+                        const retryRes = yield axios_1.default.post("https://api.linkedin.com/v2/ugcPosts", body, {
+                            headers: {
+                                Authorization: `Bearer ${newAccessToken}`,
+                                "X-Restli-Protocol-Version": "2.0.0",
+                            },
+                        });
+                        const retryPostId = retryRes.headers["x-restli-id"] || ((_c = retryRes.data) === null || _c === void 0 ? void 0 : _c.id);
+                        return {
+                            success: true,
+                            platform_post_id: retryPostId,
+                            url: `https://www.linkedin.com/feed/update/${retryPostId}`,
+                        };
+                    }
+                    catch (refreshErr) {
+                        console.error("[LinkedIn Refresh Error]:", ((_d = refreshErr.response) === null || _d === void 0 ? void 0 : _d.data) || refreshErr.message);
+                        throw new Error("LinkedIn credentials expired. Please reconnect your account.");
+                    }
+                }
+                console.error("[LinkedIn API Error]:", ((_e = error.response) === null || _e === void 0 ? void 0 : _e.data) || error.message);
+                const errMsg = ((_g = (_f = error.response) === null || _f === void 0 ? void 0 : _f.data) === null || _g === void 0 ? void 0 : _g.message) || "";
                 if (errMsg.includes("Content is a duplicate of")) {
                     const match = errMsg.match(/(urn:li:share:\d+)/);
                     if (match) {
@@ -203,13 +202,10 @@ class RealLinkedInService {
                         };
                     }
                 }
-                throw new Error(((_f = (_e = error.response) === null || _e === void 0 ? void 0 : _e.data) === null || _f === void 0 ? void 0 : _f.message) || ((_g = error.response) === null || _g === void 0 ? void 0 : _g.data) || error.message);
+                throw new Error(((_j = (_h = error.response) === null || _h === void 0 ? void 0 : _h.data) === null || _j === void 0 ? void 0 : _j.message) || ((_k = error.response) === null || _k === void 0 ? void 0 : _k.data) || error.message);
             }
         });
     }
 }
-exports.RealLinkedInService = RealLinkedInService;
-// Factory to switch
-exports.linkedInService = process.env.USE_REAL_LINKEDIN === "true"
-    ? new RealLinkedInService()
-    : new MockLinkedInService();
+exports.LinkedInService = LinkedInService;
+exports.linkedInService = new LinkedInService();

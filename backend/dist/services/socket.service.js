@@ -98,6 +98,12 @@ class SocketService {
             console.log(`User disconnected: ${user.id}`);
         });
     }
+    pushNotification(userId, notification) {
+        // Broadcast directly to the user's private channel
+        if (this.io) {
+            this.io.to(`user:${userId}`).emit("new_notification", notification);
+        }
+    }
 }
 exports.SocketService = SocketService;
 exports.socketService = new SocketService();

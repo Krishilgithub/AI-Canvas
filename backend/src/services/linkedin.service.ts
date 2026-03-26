@@ -15,74 +15,9 @@ export interface ILinkedInService {
   ): Promise<any>;
 }
 
-export class MockLinkedInService implements ILinkedInService {
-  getAuthUrl(state: string): string {
-    return `http://localhost:3000/api/auth/callback/linkedin?code=mock_code_123&state=${state}`;
-  }
-
-  async connectAccount(userId: string, authCode: string): Promise<any> {
-    console.log(
-      `[MOCK] Connecting LinkedIn account for user ${userId} with code ${authCode}`,
-    );
-
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // Return mock token data
-    const mockData = {
-      user_id: userId,
-      platform: Platform.LINKEDIN,
-      platform_user_id: `urn:li:person:MOCK_${Math.random().toString(36).substring(7)}`,
-      platform_username: "Mock User",
-      access_token: "mock_access_token_" + Date.now(),
-      refresh_token: "mock_refresh_token_" + Date.now(),
-      status: "connected",
-      token_expires_at: new Date(Date.now() + 3600 * 1000 * 60).toISOString(), // 60 days
-    };
-
-    // Store in DB
-    const { data, error } = await supabase
-      .from("linked_accounts")
-      .upsert(mockData, { onConflict: "user_id, platform" })
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-    return data;
-  }
-
-  async getProfile(userId: string): Promise<any> {
-    // Return connection status from DB
-    const { data } = await supabase
-      .from("linked_accounts")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("platform", Platform.LINKEDIN)
-      .single();
-
-    return data || null;
-  }
-
-  async createPost(
-    userId: string,
-    content: string,
-    mediaUrls: string[] = [],
-  ): Promise<any> {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Simulate success
-    return {
-      success: true,
-      platform_post_id: `urn:li:share:MOCK_${Date.now()}`,
-      url: `https://linkedin.com/feed/update/urn:li:share:MOCK_${Date.now()}`,
-    };
-  }
-}
-
-// Real Implementation
-export class RealLinkedInService implements ILinkedInService {
-  private clientId = process.env.LINKEDIN_CLIENT_ID;
-  private clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+export class LinkedInService implements ILinkedInService {
+  private clientId = process.env.LINKEDIN_CLIENT_ID || "";
+  private clientSecret = process.env.LINKEDIN_CLIENT_SECRET || "";
   private get redirectUri() {
     const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
     const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
@@ -165,13 +100,35 @@ export class RealLinkedInService implements ILinkedInService {
     return data || null;
   }
 
+  private async _refreshAccessToken(userId: string, refreshToken: string): Promise<{ accessToken: string; expiresIn: number }> {
+    const params = new URLSearchParams();
+    params.append("grant_type", "refresh_token");
+    params.append("refresh_token", refreshToken);
+    params.append("client_id", this.clientId);
+    params.append("client_secret", this.clientSecret);
+    
+    const refreshRes = await axios.post("https://www.linkedin.com/oauth/v2/accessToken", params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+
+    const newAccessToken = refreshRes.data.access_token;
+    const newExpiresIn = refreshRes.data.expires_in;
+
+    await supabase.from("linked_accounts").update({
+      access_token: newAccessToken,
+      token_expires_at: new Date(Date.now() + newExpiresIn * 1000).toISOString(),
+    }).eq("user_id", userId).eq("platform", Platform.LINKEDIN);
+
+    return { accessToken: newAccessToken, expiresIn: newExpiresIn };
+  }
+
   async createPost(userId: string, content: string, mediaUrls: string[] = []) {
     // Fetch user account
     const { data: account } = await supabase
-      .from("linked_accounts")
-      .select("access_token, platform_user_id")
-      .eq("user_id", userId)
-      .eq("platform", Platform.LINKEDIN)
+      .from('linked_accounts')
+      .select('access_token, refresh_token, platform_user_id')
+      .eq('user_id', userId)
+      .eq('platform', Platform.LINKEDIN)
       .single();
 
     if (!account || !account.access_token)
@@ -210,6 +167,48 @@ export class RealLinkedInService implements ILinkedInService {
         url: `https://www.linkedin.com/feed/update/${postId}`,
       };
     } catch (error: any) {
+      // Token expiration / Unauthorized handler
+      if (error.response?.status === 401 && account.refresh_token) {
+        console.log(`[LinkedIn] Token expired for user ${userId}. Attempting refresh...`);
+        try {
+          const params = new URLSearchParams();
+          params.append("grant_type", "refresh_token");
+          params.append("refresh_token", account.refresh_token);
+          params.append("client_id", this.clientId as string);
+          params.append("client_secret", this.clientSecret as string);
+          
+          const refreshRes = await axios.post("https://www.linkedin.com/oauth/v2/accessToken", params, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          });
+
+          const newAccessToken = refreshRes.data.access_token;
+          const newExpiresIn = refreshRes.data.expires_in;
+
+          await supabase.from("linked_accounts").update({
+            access_token: newAccessToken,
+            expires_at: new Date(Date.now() + newExpiresIn * 1000).toISOString(),
+          }).eq("user_id", userId).eq("platform", Platform.LINKEDIN);
+
+          // Retry post
+          const retryRes = await axios.post("https://api.linkedin.com/v2/ugcPosts", body, {
+            headers: {
+              Authorization: `Bearer ${newAccessToken}`,
+              "X-Restli-Protocol-Version": "2.0.0",
+            },
+          });
+
+          const retryPostId = retryRes.headers["x-restli-id"] || retryRes.data?.id;
+          return {
+            success: true,
+            platform_post_id: retryPostId,
+            url: `https://www.linkedin.com/feed/update/${retryPostId}`,
+          };
+        } catch (refreshErr: any) {
+          console.error("[LinkedIn Refresh Error]:", refreshErr.response?.data || refreshErr.message);
+          throw new Error("LinkedIn credentials expired. Please reconnect your account.");
+        }
+      }
+
       console.error("[LinkedIn API Error]:", error.response?.data || error.message);
       
       const errMsg = error.response?.data?.message || "";
@@ -224,15 +223,9 @@ export class RealLinkedInService implements ILinkedInService {
         }
       }
 
-      throw new Error(
-        error.response?.data?.message || error.response?.data || error.message
-      );
+      throw new Error(error.response?.data?.message || error.response?.data || error.message);
     }
   }
 }
 
-// Factory to switch
-export const linkedInService =
-  process.env.USE_REAL_LINKEDIN === "true"
-    ? new RealLinkedInService()
-    : new MockLinkedInService();
+export const linkedInService = new LinkedInService();

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { supabase } from "../db";
-import { linkedInService, MockLinkedInService, RealLinkedInService } from "../services/linkedin.service";
+import { linkedInService } from "../services/linkedin.service";
 import { twitterService } from "../services/twitter.service";
 import { instagramService } from "../services/instagram.service";
 import { slackService } from "../services/slack.service";
@@ -12,6 +12,7 @@ import { workflowService } from "../services/workflow.service";
 import { Platform, PostStatus, LogLevel } from "../constants";
 import { EmailService } from "../services/email.service";
 import { schedulerService } from "../services/scheduler.service";
+import { socketService } from "../services/socket.service";
 
 export class AutomationController {
   private emailService = new EmailService();
@@ -263,14 +264,28 @@ export class AutomationController {
               trend.metadata?.suggested_angle || trend.metadata?.insight
             );
 
-            await supabase.from("generated_posts").insert({
+            const { data: insertedPost } = await supabase.from("generated_posts").insert({
               user_id,
               content: draftContent,
               trend_id: trend.id,
               status: PostStatus.NEEDS_APPROVAL,
               ai_metadata: { platform },
               created_at: new Date().toISOString(),
-            });
+            }).select().single();
+
+            if (insertedPost) {
+              const notification = {
+                user_id,
+                type: "post_needs_approval",
+                title: "Post awaiting your approval",
+                message: `A new ${platform} draft about "${trend.topic}" was generated and is ready for your review.`,
+                metadata: { platform, postId: insertedPost.id },
+              };
+              const { data: insertedNotif } = await supabase.from("notifications").insert(notification).select().single();
+              if (insertedNotif) {
+                socketService.pushNotification(user_id, insertedNotif);
+              }
+            }
           } catch (draftErr: any) {
             // FIX: Don't crash the whole scan if a single draft fails
             console.error(`[SCAN] Draft generation failed for "${trend.topic}":`, draftErr?.message);
@@ -1205,7 +1220,7 @@ export class AutomationController {
         .from("profiles")
         .upsert({
           id: user_id,
-          email: req.user.email, // Ensure email is synced from auth
+          email: req.user?.email, // Ensure email is synced from auth
           full_name,
           avatar_url,
           bio,

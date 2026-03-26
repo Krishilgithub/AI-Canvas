@@ -13,6 +13,7 @@ exports.workflowService = exports.WorkflowService = exports.postGenerationWorkfl
 const langgraph_1 = require("@langchain/langgraph");
 const google_genai_1 = require("@langchain/google-genai");
 const messages_1 = require("@langchain/core/messages");
+const keys_service_1 = require("./keys.service");
 // 1. Define State
 exports.WorkflowState = langgraph_1.Annotation.Root({
     topic: (0, langgraph_1.Annotation)(),
@@ -34,10 +35,14 @@ exports.WorkflowState = langgraph_1.Annotation.Root({
 });
 // 2. Define Nodes
 const analyzeNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userId = (_a = state.userContext) === null || _a === void 0 ? void 0 : _a.id;
+    const dbKey = yield keys_service_1.keysService.getKey(userId, 'gemini');
+    const apiKey = dbKey || process.env.GEMINI_API_KEY;
     const model = new google_genai_1.ChatGoogleGenerativeAI({
         model: "gemini-2.5-flash",
-        temperature: 0.7,
-        apiKey: process.env.GEMINI_API_KEY,
+        temperature: 0.5, // FIX: was 0.7 — lowered for more reliable strategic analysis
+        apiKey,
         maxRetries: 3,
     });
     const p = state.parameters || {};
@@ -50,38 +55,62 @@ const analyzeNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
     return { insight: response.content };
 });
 const draftNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const userId = (_a = state.userContext) === null || _a === void 0 ? void 0 : _a.id;
+    const dbKey = yield keys_service_1.keysService.getKey(userId, 'gemini');
+    const apiKey = dbKey || process.env.GEMINI_API_KEY;
     const model = new google_genai_1.ChatGoogleGenerativeAI({
         model: "gemini-2.5-flash",
-        temperature: 0.8,
-        apiKey: process.env.GEMINI_API_KEY,
+        temperature: 0.55, // FIX: was 0.8 — high temp causes hallucination of industry facts
+        apiKey,
         maxRetries: 3,
     });
     const p = state.parameters || {};
     const u = state.userContext || {};
-    const sysMsg = new messages_1.SystemMessage(`You are an expert ghostwriter creating content for ${state.platform}.
+    // Platform-specific formatting guidance injected into the system prompt
+    const platformRules = {
+        linkedin: "Use short paragraphs, start with a strong single-line hook, end with an open question.",
+        twitter: "HARD LIMIT: 280 characters. One punchy idea. No em-dashes. Be direct.",
+        x: "HARD LIMIT: 280 characters. One punchy idea. No em-dashes. Be direct.",
+        reddit: "Be authentic, detailed, and genuinely helpful. Avoid marketing language — Reddit downvotes promotional posts.",
+        instagram: "Start with a hook in the first 125 chars. Short sentences. Personal and visual.",
+        youtube: "Engaging video description optimized for search. Include watch hook in first 2 lines.",
+    };
+    const platformGuidance = platformRules[((_b = state.platform) === null || _b === void 0 ? void 0 : _b.toLowerCase()) || "linkedin"] || platformRules.linkedin;
+    const sysMsg = new messages_1.SystemMessage(`You are an expert ghostwriter creating authentic content for ${state.platform}.
   Author Role: ${u.role || "Professional"}
   Author Bio: ${u.bio || ""}
   Author Goals: ${u.goals || ""}
   Tone/Voice Preset: ${p.voice_preset || "Professional"}
   Professionalism Level: ${p.professionalism || "Balanced"}
   Vibe: ${p.vibe_check || "Engaging"}
+
+  PLATFORM RULES: ${platformGuidance}
+
+  CRITICAL: Do NOT fabricate statistics, study results, or specific data points not present in the provided context.
+  Write in an authentic, human voice. Avoid corporate jargon and generic filler phrases.
   `);
     const msg = new messages_1.HumanMessage(`Write a ${p.length || "medium"} length social media post.
   Topic: ${state.topic}
   Strategy Insight: ${state.insight}
   Primary Focus: ${p.primary_focus || "General"}
+  Output ONLY the post text. No meta-commentary or quotes.
   Do not include hashtags yet.`);
     const response = yield model.invoke([sysMsg, msg]);
     return { draft: response.content };
 });
 const formatNode = (state) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userId = (_a = state.userContext) === null || _a === void 0 ? void 0 : _a.id;
+    const dbKey = yield keys_service_1.keysService.getKey(userId, 'gemini');
+    const apiKey = dbKey || process.env.GEMINI_API_KEY;
     const p = state.parameters || {};
     let finalPost = state.draft;
     if (p.automated_hashtags || p.auto_generate_tags) {
         const model = new google_genai_1.ChatGoogleGenerativeAI({
             model: "gemini-2.5-flash",
             temperature: 0.3,
-            apiKey: process.env.GEMINI_API_KEY,
+            apiKey,
             maxRetries: 3,
         });
         const msg = new messages_1.HumanMessage(`Add 3-5 highly relevant hashtags to this post, keeping the original text exactly the same.

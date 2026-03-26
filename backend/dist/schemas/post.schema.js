@@ -10,6 +10,7 @@ exports.updatePostSchema = zod_1.z.object({
         content: zod_1.z.string().optional(),
         scheduled_time: zod_1.z.string().datetime().optional(),
         media_urls: zod_1.z.array(zod_1.z.string()).optional(),
+        platform: zod_1.z.string().optional(),
         status: zod_1.z.enum(['draft', 'scheduled', 'published', 'failed', 'needs_approval']).optional()
     })
 });
@@ -19,6 +20,7 @@ exports.createPostSchema = zod_1.z.object({
         scheduled_time: zod_1.z.string().datetime().optional(),
         media_urls: zod_1.z.array(zod_1.z.string()).optional(),
         status: zod_1.z.enum(['draft', 'scheduled', 'published', 'failed', 'needs_approval', 'approved']).optional().default('draft'),
+        platform: zod_1.z.string().optional(),
         trend_id: zod_1.z.string().optional()
     })
 });

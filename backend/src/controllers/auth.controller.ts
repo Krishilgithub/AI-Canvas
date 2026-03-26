@@ -4,6 +4,7 @@ import { twitterService } from "../services/twitter.service";
 import { instagramService } from "../services/instagram.service";
 import { slackService } from "../services/slack.service";
 import { redditService } from "../services/reddit.service";
+import { youtubeService } from "../services/youtube.service";
 import { supabase } from "../db";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -173,6 +174,49 @@ export class AuthController {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
       const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "instagram");
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+
+  // --- YOUTUBE ---
+  getYouTubeAuthUrl = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+      const state = Buffer.from(JSON.stringify({ user_id })).toString("base64");
+      const url = youtubeService.getAuthUrl(state);
+      res.json({ url });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+
+  handleYouTubeCallback = async (req: Request, res: Response) => {
+    try {
+      const { code, state, error } = req.query;
+      if (error) return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+      if (!code || !state) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
+
+      const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("ascii"));
+      const { user_id } = decodedState;
+      if (!user_id) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
+
+      await youtubeService.exchangeCodeForToken(code as string, user_id);
+      res.redirect(`${getFrontendUrl()}/integrations?success=youtube_connected`);
+    } catch (e: any) {
+      console.error("YouTube Callback Error:", e);
+      res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
+    }
+  };
+
+  disconnectYouTube = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+      const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "youtube");
       if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {

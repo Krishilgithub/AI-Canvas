@@ -10,6 +10,7 @@ import analyticsRoutes from "./routes/analytics.routes";
 import postRoutes from "./routes/post.routes";
 import paymentRoutes from "./routes/payment.routes";
 import keysRoutes from "./routes/keys.routes";
+import notificationRoutes from "./routes/notification.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { schedulerService } from "./services/scheduler.service";
 import swaggerUi from "swagger-ui-express";
@@ -85,6 +86,8 @@ app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/keys", keysRoutes);
+
+app.use("/api/v1/notifications", notificationRoutes);
 
 // FIX: Apply AI rate limiter specifically to expensive Gemini endpoints
 app.use("/api/v1/automation/scan", aiLimiter);

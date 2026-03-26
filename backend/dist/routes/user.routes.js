@@ -11,4 +11,6 @@ router.post("/profile", auth_middleware_1.requireAuth, user_controller_1.userCon
 router.post("/profile/api-key", auth_middleware_1.requireAuth, user_controller_1.userController.generateApiKey);
 // Subscription Routes
 router.get("/profile/subscription", auth_middleware_1.requireAuth, user_controller_1.userController.getSubscription);
+// Account Deletion
+router.delete("/profile", auth_middleware_1.requireAuth, user_controller_1.userController.deleteAccount);
 exports.default = router;

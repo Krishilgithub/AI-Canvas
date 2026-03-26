@@ -96,13 +96,39 @@ class InstagramService {
             // 2. Publish the container.
             const { data: accounts, error } = yield db_1.supabase
                 .from('linked_accounts')
-                .select('access_token')
+                .select('access_token, token_expires_at')
                 .eq('user_id', userId)
                 .eq('platform', 'instagram');
             if (error || !accounts || accounts.length === 0) {
                 throw new Error('Instagram account not connected');
             }
-            const accessToken = accounts[0].access_token;
+            let accessToken = accounts[0].access_token;
+            // Proactively refresh Instagram Long-Lived tokens if they expire in less than 20 days
+            if (accounts[0].token_expires_at) {
+                const expiresAt = new Date(accounts[0].token_expires_at).getTime();
+                const twentyDaysMs = 20 * 24 * 60 * 60 * 1000;
+                if (expiresAt - Date.now() < twentyDaysMs && expiresAt > Date.now()) {
+                    try {
+                        console.log(`[Instagram] Proactively refreshing long-lived token for user ${userId}...`);
+                        const refreshRes = yield axios_1.default.get('https://graph.instagram.com/refresh_access_token', {
+                            params: {
+                                grant_type: 'ig_refresh_token',
+                                access_token: accessToken
+                            }
+                        });
+                        accessToken = refreshRes.data.access_token;
+                        const newExpiresInSeconds = refreshRes.data.expires_in;
+                        yield db_1.supabase.from('linked_accounts').update({
+                            access_token: accessToken,
+                            token_expires_at: new Date(Date.now() + newExpiresInSeconds * 1000).toISOString()
+                        }).eq('user_id', userId).eq('platform', 'instagram');
+                    }
+                    catch (refreshErr) {
+                        console.error('[Instagram Proactive Refresh Error]', refreshErr);
+                        // If refresh fails, we still try to post with the old one since it technically hasn't expired yet
+                    }
+                }
+            }
             try {
                 // First, we need the user's instagram account ID using Graph API.
                 // This is a complex flow if using Business accounts. For this demonstration, we assume we have the ID or fetch it:

@@ -68,7 +68,6 @@ export async function fetcher(url: string, options: RequestInit = {}) {
     } catch (e) {
       error = { error: text || res.statusText };
     }
-    console.error(`[API Fetcher Error] ${url}:`, error);
     throw new Error(error.error || "API Error");
   }
   
@@ -99,7 +98,6 @@ export async function poster(url: string, body: any = {}) {
     } catch (e) {
       error = { error: text || res.statusText };
     }
-    console.error(`[API Poster Error] ${url}:`, JSON.stringify(error) === '{}' ? 'Empty Error Object' : error);
     throw new Error(error.error || "API Error");
   }
   
@@ -124,7 +122,6 @@ export async function puter(url: string, body: any = {}) {
     } catch (e) {
       error = { error: text || res.statusText };
     }
-    console.error(`[API Puter Error] ${url}:`, error);
     throw new Error(error.error || "API Error");
   }
   
@@ -149,7 +146,6 @@ export async function deleter(url: string, body: any = {}) {
     } catch (e) {
       error = { error: text || res.statusText };
     }
-    console.error(`[API Deleter Error] ${url}:`, error);
     throw new Error(error.error || "API Error");
   }
 

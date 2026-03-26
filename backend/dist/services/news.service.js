@@ -19,40 +19,66 @@ class NewsService {
     constructor() {
         this.apiKey = process.env.NEWSDATA_API_KEY || '';
     }
-    fetchNews(query) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+    /**
+     * Fetch news articles for a given query.
+     * FIX: Added broadFallback — if the specific query returns < 3 results,
+     * retries with a broader single-keyword query. This prevents the AI from
+     * receiving near-empty inputs and producing no trends or low-quality results.
+     */
+    fetchNews(query_1) {
+        return __awaiter(this, arguments, void 0, function* (query, maxResults = 20) {
             if (!this.apiKey) {
-                console.warn('⚠️ NewsData API key is missing.');
+                console.warn('[NewsService] ⚠️ NEWSDATA_API_KEY is not configured. Trend scanning requires this key.');
                 return [];
             }
             try {
-                // NewsData.io requires 'q' for query. Can also filter by language/country if needed.
-                // We'll search for the latest news in English.
-                const response = yield axios_1.default.get(NEWSDATA_BASE_URL, {
-                    params: {
-                        apikey: this.apiKey,
-                        q: query,
-                        language: 'en',
-                        // prioritydomain: 'top', // Optional: for higher quality sources
+                const results = yield this.queryApi(query, maxResults);
+                // FIX: If the specific query returns fewer than 3 articles, try a broader search
+                if (results.length < 3) {
+                    console.warn(`[NewsService] Specific query "${query}" returned only ${results.length} result(s). Trying broader query.`);
+                    const broadQuery = query.split(' ')[0]; // use first keyword only
+                    if (broadQuery && broadQuery !== query) {
+                        const broadResults = yield this.queryApi(broadQuery, maxResults);
+                        if (broadResults.length > results.length) {
+                            console.log(`[NewsService] Broader query "${broadQuery}" returned ${broadResults.length} results.`);
+                            return broadResults;
+                        }
                     }
-                });
-                if (response.data && response.data.results) {
-                    return response.data.results.map((article) => ({
-                        title: article.title,
-                        description: article.description,
-                        link: article.link,
-                        pubDate: article.pubDate,
-                        source_id: article.source_id,
-                        category: article.category ? article.category[0] : 'General'
-                    }));
                 }
-                return [];
+                return results;
             }
             catch (error) {
-                console.error('Error fetching news:', ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message);
+                const msg = error instanceof Error ? error.message : String(error);
+                console.error('[NewsService] Error fetching news:', msg);
                 return [];
             }
+        });
+    }
+    queryApi(query, maxResults) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield axios_1.default.get(NEWSDATA_BASE_URL, {
+                params: {
+                    apikey: this.apiKey,
+                    q: query,
+                    language: 'en',
+                    // FIX: Request more articles so the AI has richer input to work with
+                    // NewsData.io free tier returns max 10 per call; paid tiers return up to 50
+                },
+                timeout: 10000, // FIX: Added timeout to prevent hanging requests
+            });
+            if (response.data && response.data.results) {
+                return response.data.results.slice(0, maxResults).map((article) => ({
+                    title: article.title,
+                    description: article.description,
+                    link: article.link,
+                    pubDate: article.pubDate,
+                    source_id: article.source_id,
+                    category: Array.isArray(article.category) && article.category.length > 0
+                        ? article.category[0]
+                        : 'General',
+                }));
+            }
+            return [];
         });
     }
 }

@@ -15,6 +15,7 @@ const twitter_service_1 = require("../services/twitter.service");
 const instagram_service_1 = require("../services/instagram.service");
 const slack_service_1 = require("../services/slack.service");
 const reddit_service_1 = require("../services/reddit.service");
+const youtube_service_1 = require("../services/youtube.service");
 const db_1 = require("../db");
 const getFrontendUrl = () => {
     const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
@@ -175,6 +176,55 @@ class AuthController {
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
                 const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "instagram");
+                if (error)
+                    throw error;
+                res.json({ success: true });
+            }
+            catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+        // --- YOUTUBE ---
+        this.getYouTubeAuthUrl = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                if (!user_id)
+                    return res.status(401).json({ error: "Unauthorized" });
+                const state = Buffer.from(JSON.stringify({ user_id })).toString("base64");
+                const url = youtube_service_1.youtubeService.getAuthUrl(state);
+                res.json({ url });
+            }
+            catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+        this.handleYouTubeCallback = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { code, state, error } = req.query;
+                if (error)
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+                if (!code || !state)
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
+                const decodedState = JSON.parse(Buffer.from(state, "base64").toString("ascii"));
+                const { user_id } = decodedState;
+                if (!user_id)
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
+                yield youtube_service_1.youtubeService.exchangeCodeForToken(code, user_id);
+                res.redirect(`${getFrontendUrl()}/integrations?success=youtube_connected`);
+            }
+            catch (e) {
+                console.error("YouTube Callback Error:", e);
+                res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
+            }
+        });
+        this.disconnectYouTube = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                if (!user_id)
+                    return res.status(401).json({ error: "Unauthorized" });
+                const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "youtube");
                 if (error)
                     throw error;
                 res.json({ success: true });

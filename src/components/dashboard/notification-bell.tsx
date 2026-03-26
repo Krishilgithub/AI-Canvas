@@ -1,19 +1,19 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetcher } from "@/lib/api-client";
-import { Bell, Zap, FileCheck, AlertTriangle, CheckCircle, X } from "lucide-react";
+import { Bell, FileCheck, AlertTriangle, CheckCircle, X, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Notification {
   id: string;
-  type: "approval" | "failed" | "trend" | "published";
+  type: "post_needs_approval" | "post_failed" | "automation_success" | "system";
   title: string;
-  description: string;
-  href?: string;
-  timestamp: string;
-  read: boolean;
+  message: string;
+  is_read: boolean;
+  metadata?: any;
+  created_at: string;
 }
 
 // ─── Notification Bell ────────────────────────────────────────────────────────
@@ -26,64 +26,15 @@ export function NotificationBell() {
   const [loading, setLoading]           = useState(false);
   const ref                             = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const items: Notification[] = [];
-
-      // Fetch pending approvals
-      const postsRes = await fetcher("/posts?status=needs_approval&limit=10").catch(() => null);
-      const pendingPosts = postsRes?.data ?? (Array.isArray(postsRes) ? postsRes : []);
-      for (const post of pendingPosts.slice(0, 5)) {
-        const platform = post.ai_metadata?.platform ?? "unknown";
-        items.push({
-          id:          `approval-${post.id}`,
-          type:        "approval",
-          title:       "Post awaiting your approval",
-          description: `${platform.charAt(0).toUpperCase() + platform.slice(1)}: "${(post.content ?? "").substring(0, 60)}…"`,
-          href:        `/${platform}`,
-          timestamp:   post.created_at,
-          read:        false,
-        });
+      const res = await fetcher("/api/v1/notifications").catch(() => null);
+      if (res && Array.isArray(res)) {
+         setNotifications(res);
       }
-
-      // Fetch failed posts
-      const failedRes = await fetcher("/posts?status=failed&limit=5").catch(() => null);
-      const failedPosts = failedRes?.data ?? (Array.isArray(failedRes) ? failedRes : []);
-      for (const post of failedPosts.slice(0, 3)) {
-        const platform = post.ai_metadata?.platform ?? "unknown";
-        items.push({
-          id:          `failed-${post.id}`,
-          type:        "failed",
-          title:       "Post failed to publish",
-          description: `${platform}: check your OAuth connection`,
-          href:        "/integrations",
-          timestamp:   post.updated_at ?? post.created_at,
-          read:        false,
-        });
-      }
-
-      // Fetch high-impact trends (unacted)
-      const trendsRes = await fetcher("/trends?limit=5&platform=all").catch(() => null);
-      const trends = trendsRes?.data ?? (Array.isArray(trendsRes) ? trendsRes : []);
-      const highImpact = trends.filter((t: { velocity_score: number }) => t.velocity_score > 75);
-      if (highImpact.length > 0) {
-        items.push({
-          id:          `trend-alert-${Date.now()}`,
-          type:        "trend",
-          title:       `${highImpact.length} high-impact trend${highImpact.length > 1 ? "s" : ""} detected`,
-          description: `Top: "${highImpact[0].topic}" — score ${highImpact[0].velocity_score}/100`,
-          href:        "/dashboard",
-          timestamp:   new Date().toISOString(),
-          read:        false,
-        });
-      }
-
-      // Sort newest first
-      items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setNotifications(items);
     } finally {
       setLoading(false);
     }
@@ -105,23 +56,31 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const markAllRead = () =>
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const markAllRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    await fetcher("/api/v1/notifications/read-all", { method: "PUT" }).catch(() => {});
+  };
 
-  const dismiss = (id: string) =>
+  const dismiss = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await fetcher(`/api/v1/notifications/${id}`, { method: "DELETE" }).catch(() => {});
+  };
 
-  const handleClick = (n: Notification) => {
-    dismiss(n.id);
+  const handleClick = async (n: Notification) => {
+    if (!n.is_read) {
+       setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, is_read: true } : x));
+       await fetcher(`/api/v1/notifications/${n.id}/read`, { method: "PUT" }).catch(() => {});
+    }
     setOpen(false);
-    if (n.href) router.push(n.href);
+    const platform = n.metadata?.platform || "integrations";
+    router.push(`/${platform}`);
   };
 
   const ICONS = {
-    approval:  <FileCheck    className="h-4 w-4 text-amber-500" />,
-    failed:    <AlertTriangle className="h-4 w-4 text-red-500" />,
-    trend:     <Zap          className="h-4 w-4 text-blue-500" />,
-    published: <CheckCircle  className="h-4 w-4 text-green-500" />,
+    post_needs_approval:  <FileCheck    className="h-4 w-4 text-amber-500" />,
+    post_failed:          <AlertTriangle className="h-4 w-4 text-red-500" />,
+    system:               <Settings     className="h-4 w-4 text-gray-500" />,
+    automation_success:   <CheckCircle  className="h-4 w-4 text-green-500" />,
   };
 
   return (
@@ -182,20 +141,20 @@ export function NotificationBell() {
                   key={n.id}
                   className={cn(
                     "flex items-start gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors group cursor-pointer",
-                    !n.read && "bg-primary/5"
+                    !n.is_read && "bg-primary/5"
                   )}
                   onClick={() => handleClick(n)}
                 >
-                  <div className="mt-0.5 shrink-0">{ICONS[n.type]}</div>
+                  <div className="mt-0.5 shrink-0">{ICONS[n.type] || <Bell className="h-4 w-4 text-blue-500" />}</div>
                   <div className="flex-1 min-w-0">
-                    <p className={cn("text-sm font-medium leading-snug truncate", !n.read && "text-foreground")}>
+                    <p className={cn("text-sm font-medium leading-snug truncate", !n.is_read && "text-foreground")}>
                       {n.title}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
-                      {n.description}
+                      {n.message}
                     </p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
-                      {new Date(n.timestamp).toLocaleDateString("en-US", {
+                      {new Date(n.created_at).toLocaleDateString("en-US", {
                         month: "short", day: "numeric",
                         hour: "2-digit", minute: "2-digit",
                       })}

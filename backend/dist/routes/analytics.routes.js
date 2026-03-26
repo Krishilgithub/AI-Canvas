@@ -8,4 +8,5 @@ router.use(auth_middleware_1.requireAuth); // Protect all analytics routes
 router.get("/overview", analytics_controller_1.analyticsController.getOverview);
 router.get("/activity", analytics_controller_1.analyticsController.getRecentActivity);
 router.get("/stats", analytics_controller_1.analyticsController.getPlatformStats); // Generic stats for chart
+router.post("/seed", analytics_controller_1.analyticsController.seedData);
 exports.default = router;

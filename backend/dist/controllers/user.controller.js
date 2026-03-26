@@ -53,13 +53,12 @@ class UserController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { full_name, bio, notification_preferences } = req.body;
+                const { full_name, bio } = req.body;
                 const { error } = yield db_1.supabase
                     .from("profiles")
                     .update({
                     full_name,
                     bio,
-                    notification_preferences,
                     updated_at: new Date().toISOString(),
                 })
                     .eq("id", user_id);
@@ -111,13 +110,13 @@ class UserController {
                     return res.status(401).json({ error: "Unauthorized" });
                 const { data, error } = yield db_1.supabase
                     .from("profiles")
-                    .select("subscription_plan, subscription_status, billing_cycle_end")
+                    .select("subscription_tier, subscription_status, billing_cycle_end")
                     .eq("id", user_id)
                     .single();
                 if (error)
                     throw error;
                 res.json({
-                    plan: data.subscription_plan || "free",
+                    plan: data.subscription_tier || "free",
                     status: data.subscription_status || "active",
                     next_billing: data.billing_cycle_end ||
                         new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -125,6 +124,27 @@ class UserController {
             }
             catch (e) {
                 console.error("Get Subscription Error:", e);
+                res.status(500).json({ error: e.message });
+            }
+        });
+        /**
+         * Permanently Delete Account
+         * Uses Supabase admin API to destroy the auth user, which cascades and deletes all owned data
+         */
+        this.deleteAccount = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                if (!user_id)
+                    return res.status(401).json({ error: "Unauthorized" });
+                // Supabase admin deletes instantly wipe auth.users and triggers cascading deletions
+                const { error } = yield db_1.supabase.auth.admin.deleteUser(user_id);
+                if (error)
+                    throw error;
+                res.json({ success: true });
+            }
+            catch (e) {
+                console.error("Delete Account Error:", e);
                 res.status(500).json({ error: e.message });
             }
         });

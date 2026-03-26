@@ -22,6 +22,7 @@ const workflow_service_1 = require("../services/workflow.service");
 const constants_1 = require("../constants");
 const email_service_1 = require("../services/email.service");
 const scheduler_service_1 = require("../services/scheduler.service");
+const socket_service_1 = require("../services/socket.service");
 class AutomationController {
     constructor() {
         this.emailService = new email_service_1.EmailService();
@@ -54,7 +55,7 @@ class AutomationController {
             try {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 const { platform, // Get platform from body
-                niches, keywords, tone_profile, schedule_cron, smart_scheduling, require_approval, auto_retweet, } = req.body;
+                niches, keywords, tone_profile, schedule_cron, smart_scheduling, require_approval, auto_retweet, preferred_time, timezone, frequency, auto_post_enabled, } = req.body;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
                 // Validate platform
@@ -77,6 +78,10 @@ class AutomationController {
                     smart_scheduling,
                     require_approval,
                     auto_retweet,
+                    preferred_time,
+                    timezone,
+                    frequency,
+                    auto_post_enabled,
                     is_active: true,
                 }, { onConflict: "user_id, platform" })
                     .select()
@@ -86,8 +91,9 @@ class AutomationController {
                 res.json({ success: true, config: data });
             }
             catch (error) {
-                console.error("saveConfig error", error);
-                res.status(500).json({ error: error.message });
+                console.error("saveConfig error:", error);
+                const errMsg = (error === null || error === void 0 ? void 0 : error.message) || (typeof error === 'string' ? error : JSON.stringify(error));
+                res.status(500).json({ error: errMsg || "Unknown error occurred" });
             }
         });
         // Scan Real Trends — uses the Advanced Trend Intelligence System
@@ -140,17 +146,52 @@ class AutomationController {
                     return res.json({ success: true, message: "No new news found", trends: [] });
                 }
                 // Advanced Trend Intelligence Analysis
-                const analyzedTrends = yield gemini_service_1.geminiService.analyzeTrendIntelligence({
-                    genre,
-                    keywords,
-                    target_platform: platform,
-                    time_window: "last 24 hours",
-                    platform_data: newsItems.slice(0, 10),
-                });
+                // FIX: now passes more articles (20 instead of 10) for richer AI analysis
+                let analyzedTrends;
+                try {
+                    analyzedTrends = yield gemini_service_1.geminiService.analyzeTrendIntelligence({
+                        userId: user_id,
+                        genre,
+                        keywords,
+                        target_platform: platform,
+                        time_window: "last 24 hours",
+                        platform_data: newsItems.slice(0, 20),
+                        max_trends: 10,
+                    });
+                }
+                catch (aiError) {
+                    // FIX: Handle AI_UNAVAILABLE gracefully — return unscored articles with clear message
+                    if ((aiError === null || aiError === void 0 ? void 0 : aiError.message) === "AI_UNAVAILABLE") {
+                        return res.status(503).json({
+                            error: "AI scoring unavailable",
+                            message: "Gemini API key is not configured. Please add a Gemini API key in Settings → AI Models to enable trend scoring and draft generation.",
+                            action_required: "ADD_GEMINI_KEY",
+                            raw_articles: newsItems.slice(0, 10).map((a) => ({ title: a.title, description: a.description })),
+                        });
+                    }
+                    throw aiError;
+                }
+                // FIX: Deduplicate — check if a trend with the same topic was already scanned today
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const { data: existingTrends } = yield db_1.supabase
+                    .from("detected_trends")
+                    .select("topic")
+                    .eq("user_id", user_id)
+                    .gte("created_at", today.toISOString());
+                const existingTopics = new Set((existingTrends || []).map((t) => t.topic.toLowerCase().trim()));
                 // Save to DB
                 const savedTrends = [];
                 for (const trend of analyzedTrends) {
+                    // FIX: Skip if this topic was already scanned today (prevents duplicates on re-scan)
+                    const normalizedTopic = trend.topic.toLowerCase().trim();
+                    if (existingTopics.has(normalizedTopic)) {
+                        console.log(`[SCAN] Skipping duplicate topic: "${trend.topic}"`);
+                        continue;
+                    }
+                    existingTopics.add(normalizedTopic); // prevent intra-batch duplicates too
                     const trendObj = {
+                        user_id,
                         topic: trend.topic,
                         category: trend.category || genre,
                         velocity_score: Math.round(trend.impact_score * 100),
@@ -178,18 +219,36 @@ class AutomationController {
                 // Auto-generate drafts for high-impact trends (impact_score > 0.70)
                 for (const trend of savedTrends) {
                     if (trend.velocity_score > 70) {
-                        // Explicit throttling to respect free tier generation limits (15 RPM / 4 sec baseline).
-                        // We pause for 3.5 seconds to space out the parallel burst sequence safely.
+                        // Throttle to respect Gemini free-tier rate limits (15 RPM baseline)
                         yield new Promise((resolve) => setTimeout(resolve, 3500));
-                        const draftContent = yield workflow_service_1.workflowService.generatePost({ topic: trend.topic, platform: platform }, userProfile || undefined, ((_b = trend.metadata) === null || _b === void 0 ? void 0 : _b.suggested_angle) || ((_c = trend.metadata) === null || _c === void 0 ? void 0 : _c.insight));
-                        yield db_1.supabase.from("generated_posts").insert({
-                            user_id,
-                            content: draftContent,
-                            trend_id: trend.id,
-                            status: constants_1.PostStatus.NEEDS_APPROVAL,
-                            ai_metadata: { platform },
-                            created_at: new Date().toISOString(),
-                        });
+                        try {
+                            const draftContent = yield workflow_service_1.workflowService.generatePost({ topic: trend.topic, platform: platform }, userProfile || undefined, ((_b = trend.metadata) === null || _b === void 0 ? void 0 : _b.suggested_angle) || ((_c = trend.metadata) === null || _c === void 0 ? void 0 : _c.insight));
+                            const { data: insertedPost } = yield db_1.supabase.from("generated_posts").insert({
+                                user_id,
+                                content: draftContent,
+                                trend_id: trend.id,
+                                status: constants_1.PostStatus.NEEDS_APPROVAL,
+                                ai_metadata: { platform },
+                                created_at: new Date().toISOString(),
+                            }).select().single();
+                            if (insertedPost) {
+                                const notification = {
+                                    user_id,
+                                    type: "post_needs_approval",
+                                    title: "Post awaiting your approval",
+                                    message: `A new ${platform} draft about "${trend.topic}" was generated and is ready for your review.`,
+                                    metadata: { platform, postId: insertedPost.id },
+                                };
+                                const { data: insertedNotif } = yield db_1.supabase.from("notifications").insert(notification).select().single();
+                                if (insertedNotif) {
+                                    socket_service_1.socketService.pushNotification(user_id, insertedNotif);
+                                }
+                            }
+                        }
+                        catch (draftErr) {
+                            // FIX: Don't crash the whole scan if a single draft fails
+                            console.error(`[SCAN] Draft generation failed for "${trend.topic}":`, draftErr === null || draftErr === void 0 ? void 0 : draftErr.message);
+                        }
                     }
                 }
                 res.json({
@@ -346,6 +405,9 @@ class AutomationController {
                     }
                 }
                 catch (err) {
+                    if (err.message && err.message.toLowerCase().includes("not connected")) {
+                        return res.status(400).json({ error: `Please integrate your ${platform} account in Settings to publish posts. (${err.message})` });
+                    }
                     throw new Error(`Failed to post to ${platform}: ${err.message || "Unknown error"}`);
                 }
                 // Update DB
@@ -390,17 +452,22 @@ class AutomationController {
             try {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 const { id } = req.params;
-                const { content, scheduled_time } = req.body;
+                const { content, scheduled_time, platform } = req.body;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                // Real update
-                const { data, error } = yield db_1.supabase
-                    .from("generated_posts")
-                    .update({
+                // Build update payload
+                const payload = {
                     content,
                     scheduled_time,
                     updated_at: new Date().toISOString(),
-                })
+                };
+                if (platform) {
+                    payload.ai_metadata = { platform };
+                }
+                // Real update
+                const { data, error } = yield db_1.supabase
+                    .from("generated_posts")
+                    .update(payload)
                     .eq("id", id)
                     .eq("user_id", user_id) // Security check
                     .select()
@@ -422,7 +489,7 @@ class AutomationController {
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
                 console.log(`[CREATE_POST] Attempting to create for User ID: ${user_id}`);
-                const { content, scheduled_time, status, trend_id, media_urls } = req.body;
+                const { content, scheduled_time, status, trend_id, media_urls, platform } = req.body;
                 console.log("[CREATE_POST] Inserting into Real DB...");
                 const { data, error } = yield db_1.supabase
                     .from("generated_posts")
@@ -433,6 +500,7 @@ class AutomationController {
                     status,
                     trend_id,
                     media_urls, // Added
+                    ai_metadata: platform ? { platform } : undefined,
                 })
                     .select()
                     .single();
@@ -490,7 +558,7 @@ class AutomationController {
                     user_id,
                     content,
                     status: constants_1.PostStatus.NEEDS_APPROVAL,
-                    ai_metadata: { source: "manual_n8n", topic },
+                    ai_metadata: { source: "manual_n8n", topic, platform: platform || "linkedin" },
                 })
                     .select()
                     .single();
@@ -722,19 +790,23 @@ class AutomationController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { days = 30 } = req.query;
+                const { days = 30, platform } = req.query;
                 const limit = parseInt(days) || 30;
                 const startDate = new Date();
                 startDate.setDate(startDate.getDate() - limit);
                 // Aggregate by date (in case multiple accounts)
                 // Since Supabase doesn't do 'group by' easily via JS client without RPC sometimes,
                 // we fetch all rows and aggregate in JS for MVP.
-                const { data, error } = yield db_1.supabase
+                let query = db_1.supabase
                     .from("analytics_daily")
                     .select("date, impressions, clicks, likes, comments, shares")
                     .eq("user_id", user_id)
                     .gte("date", startDate.toISOString().split("T")[0])
                     .order("date", { ascending: true });
+                if (platform && platform !== "all") {
+                    query = query.eq("platform", platform);
+                }
+                const { data, error } = yield query;
                 if (error) {
                     console.error("Analytics fetch error:", error);
                     // Handle "relation does not exist" gracefully if migration missing
@@ -871,7 +943,7 @@ class AutomationController {
                 const page = parseInt(req.query.page) || 1;
                 const limit = parseInt(req.query.limit) || 10;
                 const offset = (page - 1) * limit;
-                const { status, platform } = req.query; // Added platform parameter
+                const { status, platform, startDate, endDate } = req.query; // Added date filters
                 let query = db_1.supabase
                     .from("generated_posts")
                     .select("*", { count: "exact" });
@@ -888,8 +960,15 @@ class AutomationController {
                     }
                 }
                 // JSONB Filter for target platform routing
-                if (platform) {
+                if (platform && platform !== "all") {
                     query = query.contains("ai_metadata", { platform });
+                }
+                // Date Range Filter
+                if (startDate) {
+                    query = query.gte("scheduled_time", startDate);
+                }
+                if (endDate) {
+                    query = query.lte("scheduled_time", endDate);
                 }
                 // Sorting & Pagination
                 query = query
@@ -989,7 +1068,7 @@ class AutomationController {
             }
         });
         this.updateProfile = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             try {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
@@ -999,7 +1078,7 @@ class AutomationController {
                     .from("profiles")
                     .upsert({
                     id: user_id,
-                    email: req.user.email, // Ensure email is synced from auth
+                    email: (_b = req.user) === null || _b === void 0 ? void 0 : _b.email, // Ensure email is synced from auth
                     full_name,
                     avatar_url,
                     bio,
@@ -1013,6 +1092,12 @@ class AutomationController {
                     .single();
                 if (error)
                     throw error;
+                // Sync onboarding status to auth.users metadata so middleware allows redirect
+                if (onboarding_completed !== undefined) {
+                    yield db_1.supabase.auth.admin.updateUserById(user_id, {
+                        user_metadata: { onboarding_completed }
+                    }).catch(err => console.warn("Failed to sync auth user_metadata:", err));
+                }
                 res.json({ success: true, profile: data });
             }
             catch (e) {

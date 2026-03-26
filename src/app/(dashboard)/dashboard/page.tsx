@@ -53,8 +53,9 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }
   in_progress:    { label: "Publishing…",       dot: "bg-violet-500",text: "text-violet-600"},
 };
 
-function getStatusConfig(status: string) {
-  return STATUS_CONFIG[status] || { label: status.replace(/_/g, " "), dot: "bg-secondary", text: "text-muted-foreground" };
+function getStatusConfig(status?: string | null) {
+  const safeStatus = status || "unknown";
+  return STATUS_CONFIG[safeStatus] || { label: safeStatus.replace(/_/g, " "), dot: "bg-secondary", text: "text-muted-foreground" };
 }
 
 export default function DashboardPage() {

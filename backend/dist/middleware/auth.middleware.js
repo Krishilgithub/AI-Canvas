@@ -21,18 +21,17 @@ const requireAuth = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
         if (!token) {
             return res.status(401).json({ error: 'Malformed authorization header' });
         }
-        // specific method to get user from token
         const { data: { user }, error } = yield db_1.supabase.auth.getUser(token);
         if (error || !user) {
-            console.error('Auth Error:', error === null || error === void 0 ? void 0 : error.message);
+            console.error('[Auth] Token validation failed:', error === null || error === void 0 ? void 0 : error.message);
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
-        // Attach user to request
+        // Attach typed user to request
         req.user = user;
         next();
     }
     catch (error) {
-        console.error('Auth Middleware Exception:', error);
+        console.error('[Auth] Middleware exception:', error);
         res.status(500).json({ error: 'Internal server authentication error' });
     }
 });
