@@ -37,6 +37,11 @@ export function ConfigurationPanel() {
   const [smartScheduling, setSmartScheduling] = useState(true);
   const [requireApproval, setRequireApproval] = useState(true);
   const [autoRetweet, setAutoRetweet] = useState(false);
+  
+  // Auto-poster fields
+  const [autoPostEnabled, setAutoPostEnabled] = useState(false);
+  const [preferredTime, setPreferredTime] = useState("14:30");
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 
   useEffect(() => {
     Promise.all([
@@ -66,6 +71,11 @@ export function ConfigurationPanel() {
         setSmartScheduling(config.smart_scheduling ?? false);
         setRequireApproval(config.require_approval ?? true);
         setAutoRetweet(config.auto_retweet ?? false);
+
+        if (config.preferred_time) setPreferredTime(config.preferred_time);
+        if (config.timezone) setTimezone(config.timezone);
+        if (config.frequency) setFrequency(config.frequency);
+        setAutoPostEnabled(config.auto_post_enabled ?? false);
       }
       setLoading(false);
     });
@@ -103,6 +113,10 @@ export function ConfigurationPanel() {
         schedule_cron: cron,
         smart_scheduling: smartScheduling,
         require_approval: requireApproval,
+        frequency: frequency === "twice_daily" ? "daily" : frequency,
+        preferred_time: preferredTime,
+        timezone: timezone,
+        auto_post_enabled: autoPostEnabled,
         // auto_retweet removed - it's Twitter-specific, not relevant for LinkedIn
       };
 
@@ -298,9 +312,10 @@ export function ConfigurationPanel() {
               <Label className="text-base">Posting Frequency</Label>
               <div className="space-y-2">
                 {[
-                  { id: "daily", label: "Once daily (Mon-Fri)" },
-                  { id: "twice_daily", label: "Twice daily" },
-                  { id: "custom", label: "Custom Schedule" },
+                  { id: "daily", label: "Once daily" },
+                  { id: "alternate_days", label: "Alternate days" },
+                  { id: "weekly", label: "Weekly" },
+                  { id: "custom", label: "Custom Schedule (Cron)" },
                 ].map((opt) => (
                   <div key={opt.id} className="flex items-center space-x-2">
                     <div
@@ -327,23 +342,45 @@ export function ConfigurationPanel() {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-base flex items-center gap-2">
-                      Simulate Smart Scheduling{" "}
+                      Auto-Pilot Posting{" "}
                       <Badge variant="secondary" className="text-[10px] h-4">
                         AI
                       </Badge>
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Analyze audience activity to post at peak times.
+                      Automatically schedule and publish your generated posts based on audience peak times.
                     </p>
                   </div>
                   <Switch
-                    checked={smartScheduling}
-                    onCheckedChange={setSmartScheduling}
+                    checked={autoPostEnabled}
+                    onCheckedChange={setAutoPostEnabled}
                   />
                 </div>
               </div>
 
-              <div className="space-y-4">
+              {autoPostEnabled && (
+                <div className="bg-card p-4 rounded-lg space-y-4 border mt-2">
+                  <div className="space-y-2">
+                    <Label>Preferred Posting Time</Label>
+                    <Input 
+                      type="time" 
+                      value={preferredTime} 
+                      onChange={(e) => setPreferredTime(e.target.value)} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Timezone</Label>
+                    <Input 
+                      type="text" 
+                      value={timezone} 
+                      onChange={(e) => setTimezone(e.target.value)} 
+                      placeholder="e.g. America/New_York"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <Label>Require Approval</Label>
                   <Switch

@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "C:\Users\Krishil Agrawal\Desktop\College Works\SGPS\SGP6\ai-saas\run_safe.py", line 5, in <module>
+    runpy.run_path('extra.py', run_name='__main__')
+  File "<frozen runpy>", line 291, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "extra.py", line 3357, in <module>
+    build_pdf()
+  File "extra.py", line 3311, in build_pdf
+    qs = all_questions()
+         ^^^^^^^^^^^^^^^
+  File "extra.py", line 569, in all_questions
+    Code("          order_count=('id','count')").rstrip(),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Paragraph' object has no attribute 'rstrip'

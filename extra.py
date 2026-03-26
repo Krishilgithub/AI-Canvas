@@ -49,7 +49,10 @@ def B(t):    return Paragraph(t,ST["body"])
 def Bb(t):   return Paragraph(t,ST["bold"])
 def Bu(t):   return Paragraph("  \u2022  "+t,ST["bul"])
 def Bm(t):   return Paragraph("  \u2717  "+t,ST["mis"])
-def Code(t): return Paragraph(t,ST["code"])
+def safe(t):
+    return t.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+def Code(t): return Paragraph(safe(t), ST["code"])
 def Cap(t):  return Paragraph(t,ST["cap"])
 def Sp(n=5): return Spacer(1,n)
 
@@ -563,7 +566,7 @@ def all_questions():
                 Code("      df['order_date'] = pd.to_datetime(df['created_at']).dt.date"),
                 Code("      daily_summary = df.groupby(['order_date','product_id']).agg("),
                 Code("          total_revenue=('revenue','sum'),"),
-                Code("          order_count=('id','count')").rstrip(),
+                Code("          order_count=('id','count')"),
                 Code("      ).reset_index()"),
                 Code("      # Load"),
                 Code("      daily_summary.to_sql('daily_product_summary', create_engine(DW_URL),"),
@@ -3125,7 +3128,7 @@ def all_questions():
                 Code(""),
                 Code("  inputs = proc("),
                 Code("      text='[INST] <image>\\nWhat is unusual in this image? [/INST]',"),
-                Code("      images=image, return_tensors='pt'").rstrip(),
+                Code("      images=image, return_tensors='pt'"),
                 Code("  ).to(llava.device)"),
                 Code("  output_ids = llava.generate(**inputs, max_new_tokens=200)"),
                 Code("  print(proc.decode(output_ids[0], skip_special_tokens=True))"),
@@ -3213,4 +3216,142 @@ def all_questions():
                 Code("  Monitoring               | Evidently, Grafana   | Arize, Fiddler"),
                 Code("  Lineage/Metadata         | OpenLineage, DataHub | Atlan"),
                 Code("  Vector DB                | pgvector, Qdrant     | Pinecone, Weaviate"),
-                Code("  LLM Orchestration        | L
+                Code("  LLM Orchestration        | LangChain, LlamaIndex| Bedrock Agents"),
+                Code("  ──────────────────────────────────────────────────────────────────"),
+            ]),
+        ],
+        tip="In system design interviews for ML, don't build everything from scratch. The modern 'Modern Data Stack' (MDS) relies heavily on managed services (Snowflake, Databricks, Vertex AI). Focus on the core problem: data quality, reproducibility (MLflow), and real-time vs batch inference.",
+        anchor="MLOps Stack: Storage(Delta/Iceberg), Orchestration(Airflow/Prefect), Tracking(MLflow/W&B), Serving(vLLM/Triton), Vector DB(pgvector/Qdrant), LLM Orchestrator(LangChain/LlamaIndex). Production involves lineage, monitoring(Evidently) for drift, and CI/CD for models (CT - Continuous Training)."
+    ))
+
+    qs.append(dict(lv=3, num=49,
+        q="What are AI Agents and Agentic Workflows? Explain ReAct, Plan-and-Solve, and Tool Calling.",
+        content=[
+            box("AI AGENTS vs RAG", TEAL, TEAL_LT, [
+                B("RAG is a single pipeline: Retrieve -> Generate. Agents are autonomous systems that operate in a loop: Observe -> Reason -> Act until a goal is met. They can use tools (search, calculators, APIs) and maintain long-term memory."),
+            ]),
+            Sp(),
+            box("AGENTIC PATTERNS", INDIGO, INDIGO_LT, [
+                Bb_s("1. ReAct (Reason + Act):"),
+                B("The foundation of modern agents. The LLM is prompted to alternate between 'Thought' (reasoning about what to do next) and 'Action' (calling a tool)."),
+                Code("  # ReAct Prompt Structure"),
+                Code("  Thought: I need to find the current stock price of AAPL."),
+                Code("  Action: get_stock_price('AAPL')"),
+                Code("  Observation: 150.25"),
+                Code("  Thought: Now I need to calculate 10% of this."),
+                Code("  Action: calculator('150.25 * 0.10')"),
+                Code("  Observation: 15.025"),
+                Code("  Thought: I have the final answer."),
+                Code("  Final Answer: $15.02"),
+                Sp(),
+                Bb_s("2. Plan-and-Solve:"),
+                B("Agent first creates a strict step-by-step plan, then executes it. Better for complex, multi-step tasks to avoid getting stuck in loops."),
+                Sp(),
+                Bb_s("3. Multi-Agent Collaboration (e.g., AutoGen, CrewAI):"),
+                B("Multiple specialized agents talk to each other. 'Researcher' agent gathers data, 'Coder' agent writes code, 'Reviewer' evaluates it and sends it back if wrong."),
+            ]),
+            Sp(),
+            box("TOOL CALLING (Function Calling)", AMBER, AMBER_LT, [
+                B("Modern LLMs (GPT-4, Claude 3, Llama 3) are fine-tuned to emit structured JSON matching a provided JSON Schema of available tools. You pass the schema in the API request, and the LLM returns the arguments to call it."),
+            ]),
+        ],
+        tip="Agent frameworks (LangChain Agents, LlamaIndex, AutoGen) are evolving rapidly. In interviews, emphasize the patterns (ReAct, Planning, Reflection) over specific framework syntax, because the frameworks change monthly. Also emphasize error handling when tools fail or hallucinate.",
+        anchor="AI Agents: autonomous loop (Observe->Reason->Act). ReAct: strict interleaving of Thought, Action, Observation. Plan-and-Solve: plan first, execute sequentially. Multi-Agent: specialized roles conversing. Tool Calling: LLM natively generates JSON arguments matching provided functions."
+    ))
+
+    qs.append(dict(lv=3, num=50,
+        q="How do you serve LLMs efficiently in production? Explain vLLM, PagedAttention, and Quantization.",
+        content=[
+            box("LLM SERVING BOTTLENECKS", ROSE, ROSE_LT, [
+                B("LLM generation is memory-bandwidth bound, not compute bound. Generating tokens one-by-one requires loading the entire model weights + KV cache from GPU memory to compute cores for every single token."),
+            ]),
+            Sp(),
+            box("PagedAttention & vLLM", TEAL, TEAL_LT, [
+                B("The KV Cache (Key-Value states of past tokens) grows dynamically and varies in length. Standard serving allocates contiguous memory for KV cache based on max_length, wasting ~60% to 80% of memory to fragmentation."),
+                B("PagedAttention (used in vLLM) borrows from OS virtual memory. It divides the KV cache into fixed-size blocks (pages). This allows non-contiguous memory allocation, reducing waste to <4%. It allows batching many more requests together (up to 4x throughput)."),
+            ]),
+            Sp(),
+            box("QUANTIZATION (Model Compression)", INDIGO, INDIGO_LT, [
+                Bu_s("FP16 / BF16: 16-bit floats. Standard for training and inference. Llama 3 8B needs ~16GB VRAM."),
+                Bu_s("INT8 / INT4: 8-bit or 4-bit integers. Compresses model by 2x or 4x with minimal accuracy loss. Llama 3 8B at INT4 fits in 5GB VRAM (runs on MacBooks/RTX 3060)."),
+                Bu_s("AWQ (Activation-aware Weight Quantization): keeps the 1% most important weights in FP16, quantizes the rest to INT4. Much better accuracy than naive round-to-nearest."),
+                Bu_s("GGUF / llama.cpp: format and engine for running quantized models efficiently on CPU and Apple Silicon."),
+            ]),
+            Sp(),
+            box("SERVING ENGINES", VIOLET, VIOLET_LT, [
+                Bu_s("vLLM: industry standard for high-throughput GPU serving (PagedAttention, Continuous Batching)."),
+                Bu_s("TGI (Text Generation Inference): HuggingFace's production server."),
+                Bu_s("TensorRT-LLM: Nvidia's hyper-optimized engine for Hopper/Ampere GPUs."),
+            ]),
+        ],
+        tip="If asked how to deploy an open-source LLM cost-effectively: 'Use vLLM for token throughput. If deploying on a single cheap GPU, I would use AWQ INT4 quantization to fit a 70B model onto a single 24GB VRAM card or dual 24GB cards, maintaining 95%+ of FP16 quality.'",
+        anchor="LLM Serving: memory-bandwidth bound. KV Cache fragmentation wastes memory. PagedAttention(vLLM) pages KV cache like OS virtual memory, 4x throughput. Quantization: FP16->INT8/INT4 reduces VRAM size. AWQ=preserves important weights, fast GPU inference. GGUF=CPU/Mac inference."
+    ))
+
+    return qs
+
+def build_pdf():
+    doc = SimpleDocTemplate("Data_AI_Engineering_Complete_Interview_Guide.pdf", pagesize=A4,
+                            rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    story = []
+
+    # Title Page
+    story.append(Paragraph("DATA & AI ENG", PS("_mt", fontSize=36, leading=40,
+        textColor=INDIGO, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    story.append(Sp(10))
+    story.append(Paragraph("COMPLETE INTERVIEW GUIDE", PS("_ct", fontSize=24, leading=28,
+        textColor=SLATE, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    story.append(Sp(20))
+    story.append(Paragraph("50 Essential Questions • Data Pipelines • ML Systems • LLMs", PS("_cst", fontSize=12, leading=16, textColor=SLATE_MID, fontName="Helvetica", alignment=TA_CENTER)))
+    story.append(Sp(40))
+    story.append(divider())
+    story.append(Sp(20))
+
+    qs = all_questions()
+    curr_lv = 0
+    lvl_names = {1: "LEVEL 1: FUNDAMENTALS", 2: "LEVEL 2: INTERMEDIATE", 3: "LEVEL 3: ADVANCED"}
+    subtitles = {
+        1: "Databases, SQL/NoSQL, Pandas, Sklearn, Model Metrics",
+        2: "Spark, Airflow, Streaming, Recommendation Systems, Transformers",
+        3: "RAG, Vector DBs, Fine-Tuning, MLOps, LLM Serving"
+    }
+    q_ranges = {1: "Q1 - Q18", 2: "Q19 - Q34", 3: "Q35 - Q50"}
+
+    for q in qs:
+        if q['lv'] != curr_lv:
+            if curr_lv != 0: story.append(PageBreak())
+            curr_lv = q['lv']
+            story.append(lvl_banner(lvl_names[curr_lv], subtitles[curr_lv], LVL_COLOR[curr_lv], q_ranges[curr_lv]))
+            story.append(Sp(20))
+        
+        story.append(qhead(q['num'], safe(q['q']), LVL_COLOR[curr_lv]))
+        story.append(Sp(10))
+        
+        if 'diagram' in q and q['diagram']:
+            story.append(q['diagram'])
+            if 'diagram_cap' in q and q['diagram_cap']:
+                story.append(Cap(safe(q['diagram_cap'])))
+            story.append(Sp(10))
+            
+        for c in q['content']:
+            story.append(c)
+        
+        story.append(Sp(10))
+        
+        if 'tip' in q:
+            story.append(box("INTERVIEW TIP", ORANGE, ORANGE_LT, [B(safe(q['tip']))]))
+            story.append(Sp(10))
+            
+        if 'anchor' in q:
+            story.append(box("CHEAT SHEET ANCHOR", TEAL, TEAL_LT, [B(safe(q['anchor']))]))
+            story.append(Sp(10))
+        
+        story.append(divider())
+        story.append(Sp(15))
+
+    doc.build(story)
+    print("Generated Data_AI_Engineering_Complete_Interview_Guide.pdf")
+
+if __name__ == '__main__':
+    build_pdf()

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { fetcher, poster } from "@/lib/api-client";
+import { fetcher, poster, deleter } from "@/lib/api-client";
 import {
   Card,
   CardHeader,
@@ -33,12 +33,19 @@ export default function SettingsPage() {
     subscription: { plan: "free", status: "active", next_billing: null },
   });
 
+  const [llmKeys, setLlmKeys] = useState<{ provider: string, key: string, isSaved: boolean }[]>([
+    { provider: 'openai', key: '', isSaved: false },
+    { provider: 'gemini', key: '', isSaved: false },
+    { provider: 'claude', key: '', isSaved: false },
+  ]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileData, subData] = await Promise.all([
+        const [profileData, subData, keysData] = await Promise.all([
           fetcher("/user/profile"),
           fetcher("/user/profile/subscription"),
+          fetcher("/keys/status").catch(() => ({ keys: [] })) // Fetch LLM keys
         ]);
 
         setProfile({
@@ -51,6 +58,14 @@ export default function SettingsPage() {
           },
           subscription: subData,
         });
+
+        // Update llm keys state
+        if (keysData?.keys) {
+          setLlmKeys(prev => prev.map(k => {
+            const savedKey = keysData.keys.find((sk: any) => sk.provider === k.provider);
+            return savedKey ? { ...k, isSaved: true, key: '••••••••••••••••' } : k;
+          }));
+        }
       } catch (error: any) {
         toast.error("Failed to load settings.", {
           description: error.message || "Unknown error",
@@ -104,6 +119,27 @@ export default function SettingsPage() {
       toast.error("Failed to generate API Key.", {
         description: error.message,
       });
+    }
+  };
+
+  const handleSaveLlmKey = async (provider: string, key: string) => {
+    if (!key || key === '••••••••••••••••') return;
+    try {
+      await poster("/keys/save", { provider, apiKey: key });
+      setLlmKeys(prev => prev.map(k => k.provider === provider ? { ...k, isSaved: true, key: '••••••••••••••••' } : k));
+      toast.success(`${provider} API Key saved securely!`);
+    } catch (error: any) {
+      toast.error(`Failed to save ${provider} key.`, { description: error.message });
+    }
+  };
+
+  const handleDeleteLlmKey = async (provider: string) => {
+    try {
+      await deleter(`/keys/remove?provider=${provider}`);
+      setLlmKeys(prev => prev.map(k => k.provider === provider ? { ...k, isSaved: false, key: '' } : k));
+      toast.success(`${provider} API Key removed!`);
+    } catch (error: any) {
+      toast.error(`Failed to remove ${provider} key.`, { description: error.message });
     }
   };
 
@@ -284,6 +320,48 @@ export default function SettingsPage() {
               Keep this key secret. Do not share it in client-side code.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>LLM Provider API Keys</CardTitle>
+          <CardDescription>
+            Connect your own AI models (OpenAI, Gemini, Claude). Keys are securely encrypted before storage.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {llmKeys.map((item) => (
+            <div key={item.provider} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="capitalize font-semibold">{item.provider} API Key</Label>
+                {item.isSaved ? (
+                   <span className="text-xs font-semibold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full">Connected</span>
+                ) : (
+                   <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Not Connected</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type={item.isSaved ? "text" : "password"}
+                  disabled={item.isSaved}
+                  placeholder={`Enter your ${item.provider} API key...`}
+                  value={item.key}
+                  onChange={(e) => setLlmKeys(prev => prev.map(k => k.provider === item.provider ? { ...k, key: e.target.value } : k))}
+                  className="bg-card"
+                />
+                {item.isSaved ? (
+                  <Button variant="destructive" onClick={() => handleDeleteLlmKey(item.provider)}>
+                    Remove
+                  </Button>
+                ) : (
+                  <Button variant="default" onClick={() => handleSaveLlmKey(item.provider, item.key)} disabled={!item.key}>
+                    Save
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

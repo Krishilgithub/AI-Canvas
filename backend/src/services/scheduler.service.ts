@@ -20,6 +20,10 @@ class SchedulerService {
     // Run weekly on Monday at 9:00 AM for digests
     // Cron syntax: Minute Hour DayMonth Month DayWeek
     this.weeklyJob = cron.schedule("0 9 * * 1", this.processWeeklyDigest);
+
+    // Auto-poster check every 15 minutes (or 5 minutes)
+    // Runs frequently to check if any user's local timezone reached their 'preferred_time'
+    cron.schedule("*/5 * * * *", this.processAutoScheduledPosts);
   }
 
   stop() {
@@ -61,6 +65,91 @@ class SchedulerService {
       }
     } catch (e) {
       console.error("❌ Scheduler Error:", e);
+    }
+  };
+
+  public processAutoScheduledPosts = async () => {
+    try {
+      // 1. Fetch configs with auto_post_enabled = true
+      const { data: configs, error: configError } = await supabase
+        .from("automation_configs")
+        .select("*")
+        .eq("auto_post_enabled", true);
+
+      if (configError || !configs) return;
+
+      const now = new Date();
+
+      for (const config of configs) {
+        if (!config.preferred_time) continue;
+
+        // 2. Determine if it's the exact hour/minute in the user's timezone
+        const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: config.timezone || 'UTC',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        
+        const userLocalTime = userTimeFormatter.format(now); // e.g. "14:30"
+        
+        // We run cron every 5 mins, check if we are reasonably close (e.g. matched exactly or within 5 mins)
+        // For strict matching: `if (userLocalTime === config.preferred_time)`
+        // However, standard HH:mm string matching is fine if cron runs on multiples of 5, 
+        // assuming preferred_time is also stored nicely.
+        
+        // Let's do a strict match for simplicity, assuming user selects 15, 30, 45 mins.
+        if (userLocalTime !== config.preferred_time) continue;
+
+        // 3. Check Frequency Condition
+        if (config.last_posted_at) {
+          const lastPostedDate = new Date(config.last_posted_at);
+          const diffMs = now.getTime() - lastPostedDate.getTime();
+          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+          if (config.frequency === 'daily' && diffDays < 0.95) continue;
+          if (config.frequency === 'alternate_days' && diffDays < 1.95) continue;
+          if (config.frequency === 'weekly' && diffDays < 6.95) continue;
+        }
+
+        // 4. Time to post! Find the top-ranked approved post
+        // Note: we fetch all approved posts to rank them if there's multiple
+        const { data: posts } = await supabase
+          .from("generated_posts")
+          .select("*, detected_trends(metadata)")
+          .eq("user_id", config.user_id)
+          .eq("status", "approved")
+          .filter("ai_metadata->>platform", "eq", config.platform);
+
+        if (!posts || posts.length === 0) continue;
+
+        // Rank by impact score inside detected_trends metadata
+        posts.sort((a: any, b: any) => {
+          const scoreA = a.detected_trends?.metadata?.impact_score || a.ai_metadata?.impact_score || 0;
+          const scoreB = b.detected_trends?.metadata?.impact_score || b.ai_metadata?.impact_score || 0;
+          return scoreB - scoreA;
+        });
+
+        const topPost = posts[0];
+
+        // 5. Lock and publish
+        await supabase
+          .from("generated_posts")
+          .update({ status: "in_progress" })
+          .eq("id", topPost.id);
+
+        console.log(`[AutoPoster] Publishing top post ${topPost.id} for user ${config.user_id} on ${config.platform}`);
+        
+        await this.publishPost(topPost);
+
+        // Update last_posted_at
+        await supabase
+          .from("automation_configs")
+          .update({ last_posted_at: new Date().toISOString() })
+          .eq("id", config.id);
+      }
+    } catch (e) {
+      console.error("❌ Auto Scheduled Posts Error:", e);
     }
   };
 

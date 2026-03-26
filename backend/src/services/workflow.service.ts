@@ -1,6 +1,7 @@
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { keysService } from "./keys.service";
 
 // 1. Define State
 export const WorkflowState = Annotation.Root({
@@ -24,10 +25,14 @@ export const WorkflowState = Annotation.Root({
 
 // 2. Define Nodes
 const analyzeNode = async (state: typeof WorkflowState.State) => {
+  const userId = state.userContext?.id;
+  const dbKey = await keysService.getKey(userId, 'gemini');
+  const apiKey = dbKey || process.env.GEMINI_API_KEY;
+
   const model = new ChatGoogleGenerativeAI({
     model: "gemini-2.5-flash",
     temperature: 0.7,
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey,
     maxRetries: 3,
   });
 
@@ -43,10 +48,14 @@ const analyzeNode = async (state: typeof WorkflowState.State) => {
 };
 
 const draftNode = async (state: typeof WorkflowState.State) => {
+  const userId = state.userContext?.id;
+  const dbKey = await keysService.getKey(userId, 'gemini');
+  const apiKey = dbKey || process.env.GEMINI_API_KEY;
+
   const model = new ChatGoogleGenerativeAI({
     model: "gemini-2.5-flash",
     temperature: 0.8,
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey,
     maxRetries: 3,
   });
 
@@ -73,6 +82,10 @@ const draftNode = async (state: typeof WorkflowState.State) => {
 };
 
 const formatNode = async (state: typeof WorkflowState.State) => {
+  const userId = state.userContext?.id;
+  const dbKey = await keysService.getKey(userId, 'gemini');
+  const apiKey = dbKey || process.env.GEMINI_API_KEY;
+
   const p = state.parameters || {};
   let finalPost = state.draft;
 
@@ -80,7 +93,7 @@ const formatNode = async (state: typeof WorkflowState.State) => {
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.5-flash",
       temperature: 0.3,
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey,
       maxRetries: 3,
     });
     const msg = new HumanMessage(`Add 3-5 highly relevant hashtags to this post, keeping the original text exactly the same.

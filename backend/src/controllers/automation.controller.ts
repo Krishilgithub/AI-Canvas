@@ -65,6 +65,10 @@ export class AutomationController {
         smart_scheduling,
         require_approval,
         auto_retweet,
+        preferred_time,
+        timezone,
+        frequency,
+        auto_post_enabled,
       } = req.body;
 
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
@@ -93,6 +97,10 @@ export class AutomationController {
             smart_scheduling,
             require_approval,
             auto_retweet,
+            preferred_time,
+            timezone,
+            frequency,
+            auto_post_enabled,
             is_active: true,
           },
           { onConflict: "user_id, platform" },
@@ -166,6 +174,7 @@ export class AutomationController {
 
       // Advanced Trend Intelligence Analysis
       const analyzedTrends = await geminiService.analyzeTrendIntelligence({
+        userId: user_id,
         genre,
         keywords,
         target_platform: platform,

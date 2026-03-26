@@ -9,6 +9,7 @@ import userRoutes from "./routes/user.routes";
 import analyticsRoutes from "./routes/analytics.routes";
 import postRoutes from "./routes/post.routes";
 import paymentRoutes from "./routes/payment.routes";
+import keysRoutes from "./routes/keys.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { schedulerService } from "./services/scheduler.service";
 import swaggerUi from "swagger-ui-express";
@@ -75,6 +76,7 @@ app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/keys", keysRoutes);
 
 // Swagger Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

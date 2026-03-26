@@ -17,6 +17,10 @@ export const saveConfigSchema = z.object({
     smart_scheduling: z.boolean().optional(),
     auto_retweet: z.boolean().optional(),
     platform: z.string().optional(),
+    preferred_time: z.string().optional(),
+    timezone: z.string().optional(),
+    frequency: z.enum(['daily', 'alternate_days', 'weekly']).optional(),
+    auto_post_enabled: z.boolean().optional(),
   }),
 });
 

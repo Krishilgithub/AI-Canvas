@@ -101,9 +101,39 @@ export async function puter(url: string, body: any = {}) {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     let error: any = {};
-    try { error = text ? JSON.parse(text) : {}; } catch(e) { error = { error: text || res.statusText }; }
+    try {
+      error = text ? JSON.parse(text) : {};
+    } catch (e) {
+      error = { error: text || res.statusText };
+    }
+    console.error(`[API Puter Error] ${url}:`, error);
     throw new Error(error.error || "API Error");
   }
+  
+  const text = await res.text().catch(() => "");
+  try { return text ? JSON.parse(text) : {}; } catch(e) { return text; }
+}
+
+export async function deleter(url: string, body: any = {}) {
+  const headers = await getHeaders();
+  const res = await fetch(getFullUrl(url), {
+    method: "DELETE",
+    headers,
+    body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let error: any = {};
+    try {
+      error = text ? JSON.parse(text) : {};
+    } catch (e) {
+      error = { error: text || res.statusText };
+    }
+    console.error(`[API Deleter Error] ${url}:`, error);
+    throw new Error(error.error || "API Error");
+  }
+
   const text = await res.text().catch(() => "");
   try { return text ? JSON.parse(text) : {}; } catch(e) { return text; }
 }

@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { keysService } from "./keys.service";
 
 // Output structure from the Trend Intelligence System
 export interface TrendAnalysis {
@@ -24,6 +25,7 @@ export interface TrendAnalysis {
 }
 
 export interface TrendIntelligenceInput {
+  userId?: string;
   genre: string;
   keywords: string[];
   target_platform: string;
@@ -41,26 +43,25 @@ export interface RawArticle {
 }
 
 export class GeminiService {
-  private genAI: GoogleGenerativeAI | null = null;
-  private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null = null;
-
-  constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    } else {
-      console.warn("⚠️ Gemini API key is missing.");
+  private async getModel(userId?: string): Promise<ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null> {
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (userId) {
+      const userKey = await keysService.getKey(userId, 'gemini');
+      if (userKey) apiKey = userKey;
     }
+    if (!apiKey) return null;
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Advanced Trend Intelligence Analyzer
   // ─────────────────────────────────────────────────────────────────────────
   async analyzeTrendIntelligence(input: TrendIntelligenceInput): Promise<TrendAnalysis[]> {
-    const { genre, keywords, target_platform, time_window = "last 24 hours", platform_data } = input;
+    const { userId, genre, keywords, target_platform, time_window = "last 24 hours", platform_data } = input;
 
-    if (!this.model) {
+    const model = await this.getModel(userId);
+    if (!model) {
       console.warn("[GeminiService] Model not initialized, using fallback scoring.");
       return this.fallbackAnalysis(platform_data, genre);
     }
@@ -176,7 +177,7 @@ IMPORTANT CONSTRAINTS
 If the input data is weak or insufficient, return fewer but high-confidence trends instead of low-quality results.`;
 
     try {
-      const result = await this.model.generateContent(prompt);
+      const result = await model.generateContent(prompt);
       const text = result.response.text();
 
       // Clean any accidental markdown fences
@@ -204,8 +205,9 @@ If the input data is weak or insufficient, return fewer but high-confidence tren
   // ─────────────────────────────────────────────────────────────────────────
   // Legacy: basic velocity score analyzer (used by older code paths)
   // ─────────────────────────────────────────────────────────────────────────
-  async analyzeTrendPotential(articles: RawArticle[]): Promise<TrendAnalysis[]> {
-    if (!this.model) return this.fallbackAnalysis(articles, "General");
+  async analyzeTrendPotential(articles: RawArticle[], userId?: string): Promise<TrendAnalysis[]> {
+    const model = await this.getModel(userId);
+    if (!model) return this.fallbackAnalysis(articles, "General");
 
     try {
       const prompt = `Analyze the following news headlines for their potential to be viral LinkedIn discussion topics.
@@ -215,7 +217,7 @@ High scores should be given to: Controversial tech topics, AI breakthroughs, Car
 Headlines:
 ${articles.map((a, i) => `${i}: ${a.title}`).join("\n")}`;
 
-      const result = await this.model.generateContent(prompt);
+      const result = await model.generateContent(prompt);
       const text = result.response.text();
       const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
       const analysis = JSON.parse(jsonStr);
@@ -265,8 +267,9 @@ ${articles.map((a, i) => `${i}: ${a.title}`).join("\n")}`;
     }));
   }
 
-  async generateDraft(topic: string, context: string, userContext?: Record<string, string>) {
-    if (!this.model) return `[Draft] Insights on ${topic}. ${context}`;
+  async generateDraft(topic: string, context: string, userContext?: Record<string, string>, userId?: string) {
+    const model = await this.getModel(userId);
+    if (!model) return `[Draft] Insights on ${topic}. ${context}`;
 
     try {
       const { role, niche, goals, bio } = userContext || {};
@@ -294,7 +297,7 @@ Structure: Hook, 3 key points, Call to Action.
 Length: Under 150 words.
 No hashtags yet.`;
 
-      const result = await this.model.generateContent(prompt);
+      const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (error) {
       console.error("Gemini draft generation failed:", error);

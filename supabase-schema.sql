@@ -194,5 +194,63 @@ create index profiles_email_idx on public.profiles(email);
 -- create index linkedin_posts_status_idx on public.linkedin_posts(status);
 -- create index integrations_user_id_idx on public.integrations(user_id);
 -- create index integrations_platform_idx on public.integrations(platform);
--- create index workflows_user_id_idx on public.workflows(user_id);
 -- create index workflows_is_active_idx on public.workflows(is_active);
+
+-- ============================================
+-- USER API KEYS (FEATURE 1)
+-- ============================================
+create table public.user_api_keys (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  provider text not null check (provider in ('openai', 'gemini', 'claude')),
+  encrypted_api_key text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(user_id, provider)
+);
+
+alter table public.user_api_keys enable row level security;
+
+create policy "Users can view their own API keys"
+  on public.user_api_keys for select
+  using (auth.uid() = user_id);
+
+create policy "Users can manage their own API keys"
+  on public.user_api_keys for all
+  using (auth.uid() = user_id);
+
+-- ============================================
+-- AUTOMATION CONFIGS (FEATURE 2)
+-- ============================================
+create table public.automation_configs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  platform text not null,
+  preferred_time text, -- format HH:MM
+  timezone text default 'UTC',
+  frequency text check (frequency in ('daily', 'alternate_days', 'weekly')),
+  auto_post_enabled boolean default false,
+  last_posted_at timestamp with time zone,
+  niches text[],
+  keywords text[],
+  tone_profile text,
+  schedule_cron text,
+  smart_scheduling boolean default true,
+  require_approval boolean default true,
+  auto_retweet boolean default false,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(user_id, platform)
+);
+
+alter table public.automation_configs enable row level security;
+
+create policy "Users can view their own automation configs"
+  on public.automation_configs for select
+  using (auth.uid() = user_id);
+
+create policy "Users can manage their own automation configs"
+  on public.automation_configs for all
+  using (auth.uid() = user_id);
+
