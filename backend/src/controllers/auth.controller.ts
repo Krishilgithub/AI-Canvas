@@ -81,7 +81,7 @@ export class AuthController {
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       const { error } = await supabase
-        .from("linked_accounts")
+        .from("integrations")
         .delete()
         .eq("user_id", user_id)
         .eq("platform", "linkedin");
@@ -130,7 +130,7 @@ export class AuthController {
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
-      const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "twitter");
+      const { error } = await supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "twitter");
       if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {
@@ -173,7 +173,7 @@ export class AuthController {
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
-      const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "instagram");
+      const { error } = await supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "instagram");
       if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {
@@ -216,7 +216,7 @@ export class AuthController {
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
-      const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "youtube");
+      const { error } = await supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "youtube");
       if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {

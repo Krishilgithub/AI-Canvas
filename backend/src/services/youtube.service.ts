@@ -66,7 +66,7 @@ export class YouTubeService {
       const avatarUrl = channel?.snippet?.thumbnails?.default?.url;
 
       // 4. Save to DB
-      await supabase.from("linked_accounts").upsert(
+      await supabase.from("integrations").upsert(
         {
           user_id: userId,
           platform: "youtube",
@@ -75,8 +75,8 @@ export class YouTubeService {
           access_token: access_token,
           // Only overwrite refresh token if a new one was actually given
           ...(finalRefreshToken ? { refresh_token: finalRefreshToken } : {}),
-          expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
-          connection_status: "active",
+          token_expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+          is_connected: true,
           metadata: {
             avatar: avatarUrl
           }
@@ -107,9 +107,9 @@ export class YouTubeService {
       const newAccessToken = response.data.access_token;
       const expiresIn = response.data.expires_in;
 
-      await supabase.from("linked_accounts").update({
+      await supabase.from("integrations").update({
         access_token: newAccessToken,
-        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
       }).eq("user_id", userId).eq("platform", "youtube");
 
       return newAccessToken;

@@ -56,14 +56,14 @@ class InstagramService {
       const expiresInSeconds = lgResponse.data.expires_in;
 
       // Save tokens to DB
-      await supabase.from('linked_accounts').upsert(
+      await supabase.from('integrations').upsert(
         {
           user_id: userId,
           platform: 'instagram',
           access_token: longLivedToken,
           refresh_token: '', // IG long-lived tokens just get refreshed before expiry, no separate refresh token
-          expires_at: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
-          connection_status: 'active',
+          token_expires_at: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+          is_connected: true,
         },
         { onConflict: 'user_id, platform' }
       );
@@ -88,7 +88,7 @@ class InstagramService {
     // 2. Publish the container.
 
     const { data: accounts, error } = await supabase
-      .from('linked_accounts')
+      .from('integrations')
       .select('access_token, token_expires_at')
       .eq('user_id', userId)
       .eq('platform', 'instagram');
@@ -117,7 +117,7 @@ class InstagramService {
           accessToken = refreshRes.data.access_token;
           const newExpiresInSeconds = refreshRes.data.expires_in;
           
-          await supabase.from('linked_accounts').update({
+          await supabase.from('integrations').update({
             access_token: accessToken,
             token_expires_at: new Date(Date.now() + newExpiresInSeconds * 1000).toISOString()
           }).eq('user_id', userId).eq('platform', 'instagram');

@@ -72,7 +72,7 @@ class YouTubeService {
                 const channelTitle = ((_b = channel === null || channel === void 0 ? void 0 : channel.snippet) === null || _b === void 0 ? void 0 : _b.title) || "My Channel";
                 const avatarUrl = (_e = (_d = (_c = channel === null || channel === void 0 ? void 0 : channel.snippet) === null || _c === void 0 ? void 0 : _c.thumbnails) === null || _d === void 0 ? void 0 : _d.default) === null || _e === void 0 ? void 0 : _e.url;
                 // 4. Save to DB
-                yield db_1.supabase.from("linked_accounts").upsert(Object.assign(Object.assign({ user_id: userId, platform: "youtube", platform_user_id: channelId, platform_username: channelTitle, access_token: access_token }, (finalRefreshToken ? { refresh_token: finalRefreshToken } : {})), { expires_at: new Date(Date.now() + expires_in * 1000).toISOString(), connection_status: "active", metadata: {
+                yield db_1.supabase.from("integrations").upsert(Object.assign(Object.assign({ user_id: userId, platform: "youtube", platform_user_id: channelId, platform_username: channelTitle, access_token: access_token }, (finalRefreshToken ? { refresh_token: finalRefreshToken } : {})), { token_expires_at: new Date(Date.now() + expires_in * 1000).toISOString(), is_connected: true, metadata: {
                         avatar: avatarUrl
                     } }), { onConflict: "user_id, platform" });
                 return true;
@@ -98,9 +98,9 @@ class YouTubeService {
                 });
                 const newAccessToken = response.data.access_token;
                 const expiresIn = response.data.expires_in;
-                yield db_1.supabase.from("linked_accounts").update({
+                yield db_1.supabase.from("integrations").update({
                     access_token: newAccessToken,
-                    expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+                    token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
                 }).eq("user_id", userId).eq("platform", "youtube");
                 return newAccessToken;
             }

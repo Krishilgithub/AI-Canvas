@@ -52,13 +52,13 @@ class TwitterService {
                     redirectUri: `${appUrl}/api/v1/auth/twitter/callback`,
                 });
                 // Save tokens to DB
-                yield db_1.supabase.from('linked_accounts').upsert({
+                yield db_1.supabase.from('integrations').upsert({
                     user_id: userId,
                     platform: 'twitter',
                     access_token: accessToken,
                     refresh_token: refreshToken || '',
-                    expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-                    connection_status: 'active',
+                    token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+                    is_connected: true,
                 }, { onConflict: 'user_id, platform' });
                 return true;
             }
@@ -76,7 +76,7 @@ class TwitterService {
             }
             // 1. Get User's Token from DB
             const { data: accounts, error } = yield db_1.supabase
-                .from('linked_accounts')
+                .from('integrations')
                 .select('access_token, refresh_token')
                 .eq('user_id', userId)
                 .eq('platform', 'twitter');
@@ -99,10 +99,10 @@ class TwitterService {
                     console.log("Twitter token expired, refreshing...");
                     const { client: refreshedClient, accessToken: newAcc, refreshToken: newRef, expiresIn } = yield this.client.refreshOAuth2Token(refreshToken);
                     // Update DB
-                    yield db_1.supabase.from('linked_accounts').update({
+                    yield db_1.supabase.from('integrations').update({
                         access_token: newAcc,
                         refresh_token: newRef,
-                        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
+                        token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
                     }).eq('user_id', userId).eq('platform', 'twitter');
                     const retryTweet = yield refreshedClient.v2.tweet(content);
                     return retryTweet;

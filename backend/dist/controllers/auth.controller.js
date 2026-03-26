@@ -73,7 +73,7 @@ class AuthController {
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
                 const { error } = yield db_1.supabase
-                    .from("linked_accounts")
+                    .from("integrations")
                     .delete()
                     .eq("user_id", user_id)
                     .eq("platform", "linkedin");
@@ -126,7 +126,7 @@ class AuthController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "twitter");
+                const { error } = yield db_1.supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "twitter");
                 if (error)
                     throw error;
                 res.json({ success: true });
@@ -175,7 +175,7 @@ class AuthController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "instagram");
+                const { error } = yield db_1.supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "instagram");
                 if (error)
                     throw error;
                 res.json({ success: true });
@@ -224,7 +224,7 @@ class AuthController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "youtube");
+                const { error } = yield db_1.supabase.from("integrations").delete().eq("user_id", user_id).eq("platform", "youtube");
                 if (error)
                     throw error;
                 res.json({ success: true });

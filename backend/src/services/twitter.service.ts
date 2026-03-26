@@ -53,14 +53,14 @@ class TwitterService {
       });
 
       // Save tokens to DB
-      await supabase.from('linked_accounts').upsert(
+      await supabase.from('integrations').upsert(
         {
           user_id: userId,
           platform: 'twitter',
           access_token: accessToken,
           refresh_token: refreshToken || '',
-          expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-          connection_status: 'active',
+          token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+          is_connected: true,
         },
         { onConflict: 'user_id, platform' }
       );
@@ -80,7 +80,7 @@ class TwitterService {
 
     // 1. Get User's Token from DB
     const { data: accounts, error } = await supabase
-      .from('linked_accounts')
+      .from('integrations')
       .select('access_token, refresh_token')
       .eq('user_id', userId)
       .eq('platform', 'twitter');
@@ -107,10 +107,10 @@ class TwitterService {
           const { client: refreshedClient, accessToken: newAcc, refreshToken: newRef, expiresIn } = await this.client.refreshOAuth2Token(refreshToken);
           
           // Update DB
-          await supabase.from('linked_accounts').update({
+          await supabase.from('integrations').update({
              access_token: newAcc,
              refresh_token: newRef,
-             expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
+             token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
           }).eq('user_id', userId).eq('platform', 'twitter');
 
           const retryTweet = await refreshedClient.v2.tweet(content);

@@ -66,13 +66,13 @@ class InstagramService {
                 const longLivedToken = lgResponse.data.access_token;
                 const expiresInSeconds = lgResponse.data.expires_in;
                 // Save tokens to DB
-                yield db_1.supabase.from('linked_accounts').upsert({
+                yield db_1.supabase.from('integrations').upsert({
                     user_id: userId,
                     platform: 'instagram',
                     access_token: longLivedToken,
                     refresh_token: '', // IG long-lived tokens just get refreshed before expiry, no separate refresh token
-                    expires_at: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
-                    connection_status: 'active',
+                    token_expires_at: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+                    is_connected: true,
                 }, { onConflict: 'user_id, platform' });
                 return true;
             }
@@ -95,7 +95,7 @@ class InstagramService {
             // 1. Create a media container
             // 2. Publish the container.
             const { data: accounts, error } = yield db_1.supabase
-                .from('linked_accounts')
+                .from('integrations')
                 .select('access_token, token_expires_at')
                 .eq('user_id', userId)
                 .eq('platform', 'instagram');
@@ -118,7 +118,7 @@ class InstagramService {
                         });
                         accessToken = refreshRes.data.access_token;
                         const newExpiresInSeconds = refreshRes.data.expires_in;
-                        yield db_1.supabase.from('linked_accounts').update({
+                        yield db_1.supabase.from('integrations').update({
                             access_token: accessToken,
                             token_expires_at: new Date(Date.now() + newExpiresInSeconds * 1000).toISOString()
                         }).eq('user_id', userId).eq('platform', 'instagram');
