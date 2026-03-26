@@ -6,12 +6,7 @@ export const saveConfigSchema = z.object({
     user_id: z.string().uuid().optional(),
     niches: z.array(z.string()).min(1, "At least one niche is required"),
     keywords: z.array(z.string()).optional(),
-    tone_profile: z
-      .object({
-        professionalism: z.number().min(0).max(100).optional(),
-        voice: z.string().optional(),
-      })
-      .optional(),
+    tone_profile: z.string().optional(),
     schedule_cron: z.string().optional(),
     require_approval: z.boolean().optional(),
     smart_scheduling: z.boolean().optional(),

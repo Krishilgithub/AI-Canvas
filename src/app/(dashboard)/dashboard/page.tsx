@@ -296,87 +296,90 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Manual Post Generator */}
-      <ManualPostGenerator
-        onPostGenerated={() => {
-          toast.info("Refreshing dashboard…");
-          setTimeout(() => loadData(), 1500);
-        }}
-      />
+      {/* Manual Post Generator + Recent Activity Side by Side */}
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
+        {/* Manual Post Generator */}
+        <ManualPostGenerator
+          onPostGenerated={() => {
+            toast.info("Refreshing dashboard…");
+            setTimeout(() => loadData(), 1500);
+          }}
+        />
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Recent Activity</CardTitle>
-          <Button variant="ghost" size="sm" onClick={loadData} className="gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {activity.length === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="No posts yet"
-              description="Run a trend scan or manually create your first post to see activity here."
-              action={{ label: "Run Trend Scan", onClick: handleRunScan }}
-              secondaryAction={{ label: "Create Post Manually", href: "/linkedin" }}
-              compact
-            />
-          ) : (
-            <div className="space-y-5">
-              {activity.map((item: ActivityItem, i: number) => {
-                const sc = getStatusConfig(item.status);
-                return (
-                  <div key={i} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className={`h-2 w-2 rounded-full shrink-0 ${sc.dot}`} />
-                      <div className="min-w-0">
-                        <p className="font-medium group-hover:text-primary transition-colors line-clamp-1 text-sm">
-                          {item.content}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                          {new Date(item.created_at).toLocaleDateString(undefined, {
-                            month: "short", day: "numeric",
-                            hour: "2-digit", minute: "2-digit",
-                          })}
-                          {item.error_message && (
-                            <span className="text-red-500" title={item.error_message}>
-                              · {item.error_message.slice(0, 45)}…
-                            </span>
-                          )}
-                        </p>
+        {/* Recent Activity */}
+        <Card className="flex flex-col h-[calc(100%-0px)] min-h-[400px]">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 shrink-0">
+            <CardTitle>Recent Activity</CardTitle>
+            <Button variant="ghost" size="sm" onClick={loadData} className="gap-1.5 h-8">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-auto">
+            {activity.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="No posts yet"
+                description="Run a trend scan or manually create your first post to see activity here."
+                action={{ label: "Run Trend Scan", onClick: handleRunScan }}
+                secondaryAction={{ label: "Create Post Manually", href: "/linkedin" }}
+                compact
+              />
+            ) : (
+              <div className="space-y-4 pt-2">
+                {activity.map((item: ActivityItem, i: number) => {
+                  const sc = getStatusConfig(item.status);
+                  return (
+                    <div key={i} className="flex items-start justify-between group py-1">
+                      <div className="flex items-start gap-3 min-w-0 flex-1 pr-4">
+                        <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${sc.dot}`} />
+                        <div className="min-w-0">
+                          <p className="font-medium group-hover:text-primary transition-colors line-clamp-2 text-sm leading-snug">
+                            {item.content}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                            {new Date(item.created_at).toLocaleDateString(undefined, {
+                              month: "short", day: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
+                            {item.error_message && (
+                              <span className="text-red-500" title={item.error_message}>
+                                · {item.error_message.slice(0, 45)}…
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`text-[11px] capitalize px-2 py-0.5 rounded-full font-medium bg-secondary/50 ${sc.text}`}>
+                          {sc.label}
+                        </span>
+                        {item.status === "failed" && (
+                          <Button
+                            variant="outline" size="sm"
+                            className="text-xs h-7 border-red-300 text-red-600 hover:bg-red-50 w-full"
+                            disabled={retryingId === item.id}
+                            onClick={() => handleRetry(item.id)}
+                          >
+                            {retryingId === item.id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
+                          </Button>
+                        )}
+                        {item.status === "needs_approval" && (
+                          <Button variant="outline" size="sm" className="text-xs h-7 w-full" asChild>
+                            <a href="/linkedin">Review</a>
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-4">
-                      <span className={`text-xs capitalize px-2.5 py-1 rounded-full font-medium bg-secondary/50 ${sc.text}`}>
-                        {sc.label}
-                      </span>
-                      {item.status === "failed" && (
-                        <Button
-                          variant="outline" size="sm"
-                          className="text-xs h-7 border-red-300 text-red-600 hover:bg-red-50"
-                          disabled={retryingId === item.id}
-                          onClick={() => handleRetry(item.id)}
-                        >
-                          {retryingId === item.id
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
-                        </Button>
-                      )}
-                      {item.status === "needs_approval" && (
-                        <Button variant="outline" size="sm" className="text-xs h-7" asChild>
-                          <a href="/linkedin">Review</a>
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

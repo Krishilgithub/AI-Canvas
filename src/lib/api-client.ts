@@ -31,15 +31,31 @@ export async function getAuthToken() {
 }
 
 function getFullUrl(url: string) {
-  if (url.startsWith("/api/v1/")) {
-    return API_BASE.replace("/api/v1/automation", "") + url;
+  const isProd = process.env.NODE_ENV === "production";
+  const BACKEND_URL = isProd 
+    ? "https://ai-canvass.vercel.app" 
+    : (process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1/automation", "") || "http://localhost:4000");
+
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("/api/")) return `${BACKEND_URL}${url}`;
+  
+  if (
+    url.startsWith("/user/") || 
+    url.startsWith("/keys/") || 
+    url.startsWith("/analytics/") || 
+    url.startsWith("/automation/")
+  ) {
+    return `${BACKEND_URL}/api/v1${url}`;
   }
-  return `${API_BASE}${url}`;
+
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${BACKEND_URL}/api/v1/automation${cleanUrl}`;
 }
 
 export async function fetcher(url: string, options: RequestInit = {}) {
   const headers = await getHeaders();
   const res = await fetch(getFullUrl(url), {
+    cache: "no-store",
     ...options,
     headers: { ...headers, ...(options.headers as Record<string, string> || {}) },
   });
@@ -70,6 +86,7 @@ export async function poster(url: string, body: any = {}) {
   const headers = await getHeaders();
   const res = await fetch(getFullUrl(url), {
     method: "POST",
+    cache: "no-store",
     headers,
     body: JSON.stringify(body),
   });
@@ -94,6 +111,7 @@ export async function puter(url: string, body: any = {}) {
   const headers = await getHeaders();
   const res = await fetch(getFullUrl(url), {
     method: "PUT",
+    cache: "no-store",
     headers,
     body: JSON.stringify(body),
   });
@@ -118,6 +136,7 @@ export async function deleter(url: string, body: any = {}) {
   const headers = await getHeaders();
   const res = await fetch(getFullUrl(url), {
     method: "DELETE",
+    cache: "no-store",
     headers,
     body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
   });
@@ -142,6 +161,7 @@ export async function remover(url: string) {
   const headers = await getHeaders();
   const res = await fetch(getFullUrl(url), {
     method: "DELETE",
+    cache: "no-store",
     headers,
   });
 

@@ -112,8 +112,9 @@ export class AutomationController {
 
       res.json({ success: true, config: data });
     } catch (error: any) {
-      console.error("saveConfig error", error);
-      res.status(500).json({ error: error.message });
+      console.error("saveConfig error:", error);
+      const errMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+      res.status(500).json({ error: errMsg || "Unknown error occurred" });
     }
   };
 
@@ -1218,6 +1219,14 @@ export class AutomationController {
         .single();
 
       if (error) throw error;
+
+      // Sync onboarding status to auth.users metadata so middleware allows redirect
+      if (onboarding_completed !== undefined) {
+        await supabase.auth.admin.updateUserById(user_id, {
+          user_metadata: { onboarding_completed }
+        }).catch(err => console.warn("Failed to sync auth user_metadata:", err));
+      }
+
       res.json({ success: true, profile: data });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

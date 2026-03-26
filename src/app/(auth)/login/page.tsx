@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { useState } from "react";
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (formData: FormData) => {
     setError(null);
@@ -66,7 +67,17 @@ export default function LoginPage() {
                       <label htmlFor="password" className="text-sm font-medium">Password</label>
                       <Link href="#" className="text-sm text-primary hover:underline">Forgot password?</Link>
                   </div>
-                  <Input id="password" name="password" type="password" required disabled={loading} />
+                  <div className="relative">
+                    <Input id="password" name="password" type={showPassword ? "text" : "password"} required disabled={loading} className="pr-10" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                </div>
                <Button type="submit" className="w-full" disabled={loading}>
                  {loading ? "Signing in..." : "Sign in"}

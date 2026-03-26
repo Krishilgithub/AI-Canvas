@@ -11,7 +11,8 @@ create table public.profiles (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
   full_name text,
   avatar_url text,
-  email text not null
+  email text not null,
+  bio text
 );
 
 -- Enable Row Level Security

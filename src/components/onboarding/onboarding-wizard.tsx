@@ -571,7 +571,8 @@ export function OnboardingWizard() {
         ? data.keywords.split(",").map((k) => k.trim()).filter(Boolean)
         : [];
 
-      await poster("/api/v1/user/profile", {
+      // 1. Save Profile (upserts row in 'profiles')
+      await poster("/api/v1/automation/profile", {
         role: data.role,
         bio: data.bio,
         niche: data.niche,
@@ -605,148 +606,178 @@ export function OnboardingWizard() {
   const progress = (step / TOTAL_STEPS) * 100;
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 py-12">
-      <div className="w-full max-w-[520px]">
-        {/* Brand header */}
-        <div className="flex items-center justify-center gap-3 mb-10">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/30">
+    <div className="flex flex-col md:flex-row min-h-[600px] w-full bg-black border border-border/50 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+      
+      {/* Left Column - Stepper & Branding */}
+      <div className="hidden md:flex flex-col w-1/3 bg-slate-900 text-slate-50 p-10 relative overflow-hidden">
+        {/* Decorative background */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-primary/20 blur-3xl rounded-full" />
+        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 bg-blue-500/20 blur-3xl rounded-full" />
+        
+        <div className="relative z-10 flex items-center gap-3 mb-16">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/20">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold font-heading tracking-tight">AI Canvas</span>
+          <span className="text-2xl font-bold font-heading tracking-tight">AI Canvas</span>
         </div>
 
-        {/* Card */}
-        <div className="bg-card border border-border rounded-2xl shadow-xl shadow-black/10 overflow-hidden">
-          {/* Progress bar */}
-          <div className="h-1 w-full bg-secondary">
-            <div
-              className="h-full bg-primary transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <div className="p-7">
-            {/* Step dots */}
-            <div className="flex items-center justify-center gap-2 mb-8">
-              {STEPS.map((s, i) => {
-                const idx = i + 1;
-                const completed = idx < step;
-                const current = idx === step;
-                const Icon = s.icon;
-                return (
-                  <div key={s.label} className="flex items-center">
+        <div className="relative z-10 flex-1 flex flex-col justify-center">
+          <div className="space-y-8">
+            {STEPS.map((s, i) => {
+              const idx = i + 1;
+              const completed = idx < step;
+              const current = idx === step;
+              return (
+                <div key={s.label} className="flex flex-col relative group">
+                  <div className="flex items-center gap-4">
                     <div
                       className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 text-xs font-bold",
+                        "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 z-10 font-bold bg-slate-900",
                         completed
                           ? "border-primary bg-primary text-primary-foreground"
                           : current
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-transparent text-muted-foreground"
+                          ? "border-primary text-primary shadow-[0_0_15px_rgba(var(--primary),0.3)]"
+                          : "border-slate-700 text-slate-500"
                       )}
-                      title={s.label}
                     >
-                      {completed ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                      {completed ? <Check className="h-5 w-5" /> : idx}
                     </div>
-                    {i < STEPS.length - 1 && (
-                      <div
-                        className={cn(
-                          "h-px w-8 transition-all duration-300",
-                          completed ? "bg-primary" : "bg-border"
-                        )}
-                      />
-                    )}
+                    <div className="flex flex-col">
+                      <span className={cn("text-base font-semibold transition-colors duration-300", 
+                        current || completed ? "text-slate-50" : "text-slate-500"
+                      )}>
+                        {s.label}
+                      </span>
+                      {current && (
+                        <span className="text-xs text-primary/80 font-medium animate-in slide-in-from-left-2 fade-in">
+                          In progress
+                        </span>
+                      )}
+                    </div>
                   </div>
-                );
-              })}
+                  {/* Vertical connecting line */}
+                  {i < STEPS.length - 1 && (
+                    <div
+                      className={cn(
+                        "absolute left-[19px] top-10 w-[2px] h-full -z-0 transition-all duration-300",
+                        completed ? "bg-primary" : "bg-slate-800"
+                      )}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column - Step Content */}
+      <div className="flex-1 flex flex-col p-6 sm:p-10 relative">
+        {/* Mobile Header (Hidden on Desktop) */}
+        <div className="md:hidden flex items-center justify-between mb-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <Sparkles className="h-4 w-4 text-primary-foreground" />
             </div>
+            <span className="font-bold text-lg">AI Canvas</span>
+          </div>
+          <div className="text-sm font-medium text-muted-foreground">
+            Step {step} of {TOTAL_STEPS}
+          </div>
+        </div>
+        
+        {/* Mobile Progress Bar */}
+        <div className="md:hidden h-1.5 w-full bg-secondary rounded-full overflow-hidden mb-8">
+          <div
+            className="h-full bg-primary transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
 
-            {/* Step title */}
-            <div className="mb-6">
-              <h2 className="text-xl font-bold font-heading tracking-tight">
-                {step === 1 && "Tell us about yourself"}
-                {step === 2 && "What are your goals?"}
-                {step === 3 && "Connect your AI brain"}
-                {step === 4 && "Connect a platform"}
-                {step === 5 && "Ready for launch 🚀"}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {step === 1 && "Help us tailor your AI content strategy from day one."}
-                {step === 2 && "Choose goals and define your niche — this trains your trend filters."}
-                {step === 3 && "Add your Gemini API key to enable AI content generation."}
-                {step === 4 && "Connect where you want to publish AI-generated content."}
-                {step === 5 && "Review your setup and launch your personalized workspace."}
-              </p>
-            </div>
+        {/* Step Header */}
+        <div className="mb-8 pl-1">
+          <h2 className="text-2xl md:text-3xl font-bold font-heading tracking-tight text-foreground">
+            {step === 1 && "Tell us about yourself"}
+            {step === 2 && "What are your goals?"}
+            {step === 3 && "Connect your AI brain"}
+            {step === 4 && "Choose your platforms"}
+            {step === 5 && "Ready for launch 🚀"}
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm md:text-base leading-relaxed max-w-lg">
+            {step === 1 && "Help us tailor your AI content strategy to match your unique voice from day one."}
+            {step === 2 && "Choose your goals and define your niche — this trains our trend filters to find relevant topics."}
+            {step === 3 && "Add your Gemini API key to enable secure, private AI content generation."}
+            {step === 4 && "Connect the social channels where you want to build authority and publish automation."}
+            {step === 5 && "Review your setup and launch your personalized authority workspace."}
+          </p>
+        </div>
 
-            {/* Step content */}
-            <div className="min-h-[280px]">
-              {step === 1 && <StepPersona data={data} onChange={updateData} />}
-              {step === 2 && <StepGoals data={data} onChange={updateData} />}
-              {step === 3 && <StepApiKey data={data} onChange={updateData} />}
-              {step === 4 && (
-                <StepPlatform
-                  data={data}
-                  onChange={updateData}
-                  connections={connections}
-                  onRefresh={fetchConnections}
-                />
-              )}
-              {step === 5 && (
-                <StepReady data={data} connections={connections} launching={launching} />
-              )}
-            </div>
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
-              <div>
-                {step > 1 && step < TOTAL_STEPS && (
-                  <Button variant="ghost" onClick={handleBack} className="gap-1.5">
-                    <ChevronLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  Step {step} of {TOTAL_STEPS}
-                </span>
-
-                {step < TOTAL_STEPS ? (
-                  <Button
-                    onClick={handleNext}
-                    disabled={!canAdvance()}
-                    className="gap-1.5 min-w-[110px]"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleLaunch}
-                    disabled={launching}
-                    className="gap-1.5 min-w-[140px] bg-gradient-to-r from-primary to-primary/80 shadow-md shadow-primary/30"
-                  >
-                    {launching ? (
-                      <div className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                    ) : (
-                      <>
-                        <Rocket className="h-4 w-4" />
-                        Launch Dashboard
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
+        {/* Form Content Area */}
+        <div className="flex-1 min-h-[320px] rounded-xl border border-border/50 bg-[#0A0A0A] p-6 md:p-8 shadow-inner relative overflow-hidden">
+           {/* Subtle background element */}
+           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none" />
+          
+          <div className="relative z-10 max-w-xl mx-auto">
+            {step === 1 && <StepPersona data={data} onChange={updateData} />}
+            {step === 2 && <StepGoals data={data} onChange={updateData} />}
+            {step === 3 && <StepApiKey data={data} onChange={updateData} />}
+            {step === 4 && (
+              <StepPlatform
+                data={data}
+                onChange={updateData}
+                connections={connections}
+                onRefresh={fetchConnections}
+              />
+            )}
+            {step === 5 && (
+              <StepReady data={data} connections={connections} launching={launching} />
+            )}
           </div>
         </div>
 
-        {/* Footer note */}
-        <p className="text-center text-xs text-muted-foreground/60 mt-6">
-          You can always update these settings later from your profile.
-        </p>
+        {/* Navigation Footer */}
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-border/60 max-w-xl mx-auto w-full">
+          <div>
+            {step > 1 ? (
+              <Button variant="ghost" onClick={handleBack} className="gap-2 text-muted-foreground hover:text-foreground">
+                <ChevronLeft className="h-4 w-4" />
+                Back
+              </Button>
+            ) : (
+               <div className="w-20" /> // Spacer
+            )}
+          </div>
+
+          <div className="flex items-center gap-4">
+            {step < TOTAL_STEPS ? (
+              <Button
+                onClick={handleNext}
+                disabled={!canAdvance()}
+                className="gap-2 min-w-[120px] shadow-md hover:shadow-lg transition-all"
+                size="lg"
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleLaunch}
+                disabled={launching}
+                size="lg"
+                className="gap-2 min-w-[160px] bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 shadow-md shadow-primary/20 hover:shadow-lg transition-all"
+              >
+                {launching ? (
+                  <div className="h-5 w-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                ) : (
+                  <>
+                    <Rocket className="h-5 w-5" />
+                    Enter Workspace
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

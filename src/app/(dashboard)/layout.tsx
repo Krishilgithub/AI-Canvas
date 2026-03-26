@@ -1,4 +1,5 @@
 import { Sidebar, MobileSidebar } from "@/components/dashboard/sidebar";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { Sparkles } from "lucide-react";
 
 export default function DashboardLayout({
@@ -27,9 +28,16 @@ export default function DashboardLayout({
               </span>
             </div>
           </div>
+          {/* FIX (Gap 5): In-app notification bell — no longer email-only retention */}
+          <NotificationBell />
         </div>
 
-        {/* Main Content Area - Flows naturally with window scroll */}
+        {/* Desktop top bar with notification bell */}
+        <div className="hidden md:flex items-center justify-end px-8 py-3 border-b border-border/50 bg-card/60 sticky top-0 z-10 backdrop-blur-sm">
+          <NotificationBell />
+        </div>
+
+        {/* Main Content */}
         <main className="flex-1 p-4 md:p-8 pb-20">
           <div className="max-w-6xl mx-auto space-y-8">{children}</div>
         </main>
