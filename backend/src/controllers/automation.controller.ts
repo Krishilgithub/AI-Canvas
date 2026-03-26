@@ -173,19 +173,57 @@ export class AutomationController {
       }
 
       // Advanced Trend Intelligence Analysis
-      const analyzedTrends = await geminiService.analyzeTrendIntelligence({
-        userId: user_id,
-        genre,
-        keywords,
-        target_platform: platform,
-        time_window: "last 24 hours",
-        platform_data: newsItems.slice(0, 10),
-      });
+      // FIX: now passes more articles (20 instead of 10) for richer AI analysis
+      let analyzedTrends;
+      try {
+        analyzedTrends = await geminiService.analyzeTrendIntelligence({
+          userId: user_id,
+          genre,
+          keywords,
+          target_platform: platform,
+          time_window: "last 24 hours",
+          platform_data: newsItems.slice(0, 20),
+          max_trends: 10,
+        });
+      } catch (aiError: any) {
+        // FIX: Handle AI_UNAVAILABLE gracefully — return unscored articles with clear message
+        if (aiError?.message === "AI_UNAVAILABLE") {
+          return res.status(503).json({
+            error: "AI scoring unavailable",
+            message: "Gemini API key is not configured. Please add a Gemini API key in Settings → AI Models to enable trend scoring and draft generation.",
+            action_required: "ADD_GEMINI_KEY",
+            raw_articles: newsItems.slice(0, 10).map((a) => ({ title: a.title, description: a.description })),
+          });
+        }
+        throw aiError;
+      }
+
+      // FIX: Deduplicate — check if a trend with the same topic was already scanned today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { data: existingTrends } = await supabase
+        .from("detected_trends")
+        .select("topic")
+        .eq("user_id", user_id)
+        .gte("created_at", today.toISOString());
+
+      const existingTopics = new Set(
+        (existingTrends || []).map((t: { topic: string }) => t.topic.toLowerCase().trim())
+      );
 
       // Save to DB
       const savedTrends = [];
       for (const trend of analyzedTrends) {
+        // FIX: Skip if this topic was already scanned today (prevents duplicates on re-scan)
+        const normalizedTopic = trend.topic.toLowerCase().trim();
+        if (existingTopics.has(normalizedTopic)) {
+          console.log(`[SCAN] Skipping duplicate topic: "${trend.topic}"`);
+          continue;
+        }
+        existingTopics.add(normalizedTopic); // prevent intra-batch duplicates too
+
         const trendObj = {
+          user_id,
           topic: trend.topic,
           category: trend.category || genre,
           velocity_score: Math.round(trend.impact_score * 100),
@@ -214,24 +252,28 @@ export class AutomationController {
       // Auto-generate drafts for high-impact trends (impact_score > 0.70)
       for (const trend of savedTrends) {
         if (trend.velocity_score > 70) {
-          // Explicit throttling to respect free tier generation limits (15 RPM / 4 sec baseline).
-          // We pause for 3.5 seconds to space out the parallel burst sequence safely.
+          // Throttle to respect Gemini free-tier rate limits (15 RPM baseline)
           await new Promise((resolve) => setTimeout(resolve, 3500));
 
-          const draftContent = await workflowService.generatePost(
-            { topic: trend.topic, platform: platform },
-            userProfile || undefined,
-            trend.metadata?.suggested_angle || trend.metadata?.insight
-          );
+          try {
+            const draftContent = await workflowService.generatePost(
+              { topic: trend.topic, platform: platform },
+              userProfile || undefined,
+              trend.metadata?.suggested_angle || trend.metadata?.insight
+            );
 
-          await supabase.from("generated_posts").insert({
-            user_id,
-            content: draftContent,
-            trend_id: trend.id,
-            status: PostStatus.NEEDS_APPROVAL,
-            ai_metadata: { platform },
-            created_at: new Date().toISOString(),
-          });
+            await supabase.from("generated_posts").insert({
+              user_id,
+              content: draftContent,
+              trend_id: trend.id,
+              status: PostStatus.NEEDS_APPROVAL,
+              ai_metadata: { platform },
+              created_at: new Date().toISOString(),
+            });
+          } catch (draftErr: any) {
+            // FIX: Don't crash the whole scan if a single draft fails
+            console.error(`[SCAN] Draft generation failed for "${trend.topic}":`, draftErr?.message);
+          }
         }
       }
 

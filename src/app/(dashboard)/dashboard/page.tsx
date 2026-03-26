@@ -11,6 +11,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Zap,
+  FileText,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +22,17 @@ import { toast } from "sonner";
 import { AnalyticsView } from "@/components/dashboard/analytics-view";
 import { ManualPostGenerator } from "@/components/automation/manual-post-generator";
 import { Progress } from "@/components/ui/progress";
+import {
+  ScanProgressStepper,
+  useScanStager,
+  type ScanStage,
+} from "@/components/dashboard/scan-progress-stepper";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface QuotaInfo {
   used: number;
   limit: number | null;
-  remaining: number | null;
   tier: string;
   allowed: boolean;
 }
@@ -36,18 +45,35 @@ interface ActivityItem {
   error_message?: string;
 }
 
+const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
+  needs_approval: { label: "Awaiting Approval", dot: "bg-amber-500", text: "text-amber-600" },
+  published:      { label: "Published",         dot: "bg-green-500", text: "text-green-600" },
+  failed:         { label: "Failed",            dot: "bg-red-500",   text: "text-red-600"   },
+  scheduled:      { label: "Scheduled",         dot: "bg-blue-500",  text: "text-blue-600"  },
+  in_progress:    { label: "Publishing…",       dot: "bg-violet-500",text: "text-violet-600"},
+};
+
+function getStatusConfig(status: string) {
+  return STATUS_CONFIG[status] || { label: status.replace(/_/g, " "), dot: "bg-secondary", text: "text-muted-foreground" };
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<{ metrics: Record<string, string | number>; activity: ActivityItem[] } | null>(null);
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [connections, setConnections] = useState<string[]>([]);
+
+  const { stage, setStage } = useScanStager(scanning);
 
   const loadData = useCallback(async () => {
     try {
-      const [overviewRes, activityRes, quotaRes] = await Promise.all([
+      const [overviewRes, activityRes, quotaRes, connRes] = await Promise.all([
         fetcher("/api/v1/analytics/overview"),
         fetcher("/api/v1/analytics/activity"),
         fetcher("/api/v1/automation/quota").catch(() => null),
+        fetcher("/api/v1/automation/connections").catch(() => []),
       ]);
 
       setStats({
@@ -62,6 +88,13 @@ export default function DashboardPage() {
       });
 
       if (quotaRes) setQuota(quotaRes);
+
+      const list = Array.isArray(connRes) ? connRes : [];
+      setConnections(
+        list
+          .filter((c: { status: string }) => c.status === "connected" || c.status === "active")
+          .map((c: { platform: string }) => c.platform)
+      );
     } catch (error) {
       console.error("Dashboard load error", error);
       toast.error("Failed to load dashboard data");
@@ -79,7 +112,7 @@ export default function DashboardPage() {
       setRetryingId(postId);
       await fetcher(`/api/v1/automation/posts/${postId}/retry`, { method: "POST" });
       toast.success("Post retried and published successfully!");
-      loadData(); // Refresh
+      loadData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Retry failed";
       toast.error(message);
@@ -89,136 +122,172 @@ export default function DashboardPage() {
   };
 
   const handleRunScan = async () => {
+    if (scanning) return;
+    setScanning(true);
     try {
-      toast.info("Scanning for trends...");
       await fetcher("/api/v1/automation/scan", { method: "POST" });
-      toast.success("Scan completed! Refreshing...");
-      loadData();
+      setStage("done" as ScanStage);
+      toast.success("Scan completed! Trends and drafts are ready.");
+      setTimeout(() => {
+        setScanning(false);
+        loadData();
+      }, 2000);
     } catch {
-      toast.error("Scan failed. Try again.");
+      setStage("error" as ScanStage);
+      toast.error("Scan failed. Please try again.");
+      setTimeout(() => setScanning(false), 2000);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (loading) return <DashboardSkeleton />;
 
   const m = stats?.metrics || {};
   const activity = stats?.activity || [];
   const failedPosts = activity.filter((a) => a.status === "failed");
-  const quotaPercent = quota?.limit ? Math.round(((quota.used) / quota.limit) * 100) : 0;
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "needs_approval": return "bg-amber-500";
-      case "published": return "bg-green-500";
-      case "failed": return "bg-red-500";
-      case "scheduled": return "bg-blue-500";
-      default: return "bg-secondary";
-    }
-  };
+  const pendingPosts = activity.filter((a) => a.status === "needs_approval");
+  const quotaPercent = quota?.limit ? Math.round((quota.used / quota.limit) * 100) : 0;
+  const hasConnections = connections.length > 0;
 
   return (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex items-center justify-between mb-8">
+    <div className="animate-in fade-in duration-500 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold font-heading tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back! Here&apos;s what&apos;s happening today.</p>
         </div>
-        <Button onClick={handleRunScan}>
-          <Activity className="mr-2 h-4 w-4" /> Run Quick Scan
+        <Button onClick={handleRunScan} disabled={scanning} className="gap-2">
+          {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+          {scanning ? "Scanning…" : "Run Quick Scan"}
         </Button>
       </div>
 
-      {/* Quota Warning Banner */}
+      {/* Contextual banners */}
+      {!hasConnections && (
+        <div className="flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 text-blue-600 rounded-xl px-4 py-3">
+          <Wifi className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-medium flex-1">
+            No platforms connected — AI Canvas can&apos;t publish content until you connect an account.
+          </p>
+          <Button size="sm" variant="outline" className="border-blue-400 text-blue-600 hover:bg-blue-50 shrink-0" asChild>
+            <a href="/integrations">Connect Now →</a>
+          </Button>
+        </div>
+      )}
+
       {quota && !quota.allowed && (
-        <div className="mb-6 flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-600 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-600 rounded-xl px-4 py-3">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <p className="text-sm font-medium">
-            You&apos;ve used all {quota.limit} AI generations for this month on the <strong>{quota.tier}</strong> plan.
-            <a href="/settings?tab=billing" className="ml-2 underline">Upgrade to Pro →</a>
+            You&apos;ve used all {quota.limit} AI generations for this month on the <strong>{quota.tier}</strong> plan.{" "}
+            <a href="/settings?tab=billing" className="underline">Upgrade to Pro →</a>
           </p>
         </div>
       )}
 
-      {/* Failed Posts Alert */}
       {failedPosts.length > 0 && (
-        <div className="mb-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-600 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-600 rounded-xl px-4 py-3">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <p className="text-sm font-medium">
-            {failedPosts.length} post{failedPosts.length > 1 ? "s" : ""} failed to publish. See &quot;Recent Activity&quot; below to retry.
+            {failedPosts.length} post{failedPosts.length > 1 ? "s" : ""} failed to publish. See &quot;Recent Activity&quot; to retry.
           </p>
         </div>
       )}
 
-      {/* Metrics Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Scan progress stepper */}
+      {scanning && <ScanProgressStepper stage={stage} />}
+
+      {/* Pending approvals quick-action */}
+      {pendingPosts.length > 0 && !scanning && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+          <Clock className="h-5 w-5 text-amber-500 shrink-0" />
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-400 flex-1">
+            <strong>{pendingPosts.length} draft{pendingPosts.length > 1 ? "s" : ""}</strong> waiting for your approval.
+          </p>
+          <Button size="sm" variant="outline" className="border-amber-400 text-amber-600 hover:bg-amber-50 shrink-0" asChild>
+            <a href="/linkedin">Review →</a>
+          </Button>
+        </div>
+      )}
+
+      {/* Metric cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: "Total Reach", value: m.total_reach || "0", change: "All time", icon: Users, color: "text-blue-500" },
-          { title: "Avg. Engagement", value: m.engagement_rate || "0%", change: "Based on posts", icon: ArrowUpRight, color: "text-green-500" },
-          { title: "Pending Approval", value: String(m.pending_approvals || 0), change: "Requires attention", icon: Clock, color: "text-amber-500" },
-          { title: "Published This Week", value: String(m.published_this_week || 0), change: "Target: 5", icon: CheckCircle2, color: "text-purple-500" },
+          { title: "Total Reach", value: m.total_reach || "0", sub: "All time impressions", icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+          { title: "Avg. Engagement", value: m.engagement_rate || "0%", sub: "Across all platforms", icon: ArrowUpRight, color: "text-green-500", bg: "bg-green-500/10" },
+          { title: "Pending Approval", value: String(m.pending_approvals || 0), sub: Number(m.pending_approvals) > 0 ? "Tap to review" : "All clear!", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
+          { title: "Published This Week", value: String(m.published_this_week || 0), sub: "Target: 5 per week", icon: CheckCircle2, color: "text-purple-500", bg: "bg-purple-500/10" },
         ].map((item, i) => (
-          <Card key={i} className="hover:shadow-md transition-shadow">
+          <Card key={i} className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{item.title}</CardTitle>
-              <item.icon className={`h-4 w-4 ${item.color}`} />
+              <div className={`h-8 w-8 rounded-lg ${item.bg} flex items-center justify-center`}>
+                <item.icon className={`h-4 w-4 ${item.color}`} />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold font-heading">{item.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{item.change}</p>
+              <p className="text-xs text-muted-foreground mt-1">{item.sub}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Analytics & System */}
-      <div className="grid lg:grid-cols-3 gap-8 mb-8">
+      {/* Chart + System Status */}
+      <div className="grid lg:grid-cols-3 gap-6">
         <div className="col-span-1 lg:col-span-2">
           <AnalyticsView />
         </div>
 
-        {/* System Status + Quota */}
-        <Card className="col-span-1 bg-secondary/10 border-dashed">
+        <Card className="col-span-1">
           <CardHeader>
-            <CardTitle>System Status</CardTitle>
+            <CardTitle className="text-base">System Status</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {[
-              { label: "LinkedIn API", status: "Connected", color: "text-green-500", dot: "bg-green-500" },
-              { label: "Gemini AI", status: "Operational", color: "text-green-500", dot: "bg-green-500" },
-              { label: "LangSmith", status: "Tracing", color: "text-blue-500", dot: "bg-blue-500" },
+              {
+                label: "Platform Connections",
+                status: hasConnections ? `${connections.length} connected` : "None connected",
+                online: hasConnections,
+              },
+              {
+                label: "Gemini AI",
+                status: quota && quota.used > 0 ? "Operational" : "Not configured",
+                online: !!(quota && quota.used > 0),
+              },
+              {
+                label: "Auto-Scheduler",
+                status: "Running",
+                online: true,
+              },
             ].map((s) => (
               <div key={s.label} className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{s.label}</span>
-                <span className={`flex items-center gap-2 ${s.color} font-medium`}>
-                  <span className={`h-2 w-2 rounded-full ${s.dot}`} /> {s.status}
+                <span className={`flex items-center gap-1.5 font-medium ${s.online ? "text-green-600" : "text-muted-foreground"}`}>
+                  {s.online ? <Wifi className="h-3 w-3 text-green-500" /> : <WifiOff className="h-3 w-3 text-muted-foreground" />}
+                  {s.status}
                 </span>
               </div>
             ))}
 
-            {/* Live Quota */}
             {quota && (
-              <div className="pt-4 border-t border-dashed mt-4">
-                <div className="flex justify-between items-center mb-1">
-                  <p className="text-sm font-medium flex items-center gap-1">
-                    <Zap className="h-3 w-3 text-amber-400" /> AI Generations
+              <div className="pt-4 border-t border-border mt-2">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-medium flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-amber-400" />
+                    AI Generations
                   </p>
                   <Badge variant="outline" className="capitalize text-xs">{quota.tier}</Badge>
                 </div>
                 <Progress value={quota.limit ? quotaPercent : 0} className="h-2" />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
                   <span>{quota.used} used</span>
                   <span>{quota.limit ? `${quota.limit} limit` : "Unlimited"}</span>
                 </div>
                 {quota.limit && quotaPercent >= 80 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    {quotaPercent >= 100 ? "Quota exceeded!" : "Approaching limit."}{" "}
-                    <a href="/settings?tab=billing" className="underline">Upgrade</a>
+                  <p className="text-xs text-amber-600 mt-1.5">
+                    {quotaPercent >= 100 ? "Quota exceeded! " : "Approaching limit. "}
+                    <a href="/settings?tab=billing" className="underline">Upgrade →</a>
                   </p>
                 )}
               </div>
@@ -227,71 +296,85 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Create Manual Post */}
-      <div className="mb-8">
-        <ManualPostGenerator
-          onPostGenerated={() => {
-            toast.info("Refreshing dashboard...");
-            setTimeout(() => loadData(), 1500);
-          }}
-        />
-      </div>
+      {/* Manual Post Generator */}
+      <ManualPostGenerator
+        onPostGenerated={() => {
+          toast.info("Refreshing dashboard…");
+          setTimeout(() => loadData(), 1500);
+        }}
+      />
 
       {/* Recent Activity */}
-      <Card className="mb-8">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Activity</CardTitle>
-          <Button variant="ghost" size="sm" onClick={loadData}>
-            <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+          <Button variant="ghost" size="sm" onClick={loadData} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {activity.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No recent activity found.</div>
-            ) : (
-              activity.map((item: ActivityItem, i: number) => (
-                <div key={i} className="flex items-center justify-between group">
-                  <div className="flex items-center gap-4">
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
-                    <div>
-                      <p className="font-medium group-hover:text-primary transition-colors cursor-pointer line-clamp-1 max-w-[300px]">
-                        {item.content}
-                      </p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        {new Date(item.created_at).toLocaleDateString()}
-                        {item.error_message && (
-                          <span className="text-red-500 text-xs" title={item.error_message}>
-                            · {item.error_message.slice(0, 40)}...
-                          </span>
-                        )}
-                      </p>
+          {activity.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No posts yet"
+              description="Run a trend scan or manually create your first post to see activity here."
+              action={{ label: "Run Trend Scan", onClick: handleRunScan }}
+              secondaryAction={{ label: "Create Post Manually", href: "/linkedin" }}
+              compact
+            />
+          ) : (
+            <div className="space-y-5">
+              {activity.map((item: ActivityItem, i: number) => {
+                const sc = getStatusConfig(item.status);
+                return (
+                  <div key={i} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${sc.dot}`} />
+                      <div className="min-w-0">
+                        <p className="font-medium group-hover:text-primary transition-colors line-clamp-1 text-sm">
+                          {item.content}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                          {new Date(item.created_at).toLocaleDateString(undefined, {
+                            month: "short", day: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                          })}
+                          {item.error_message && (
+                            <span className="text-red-500" title={item.error_message}>
+                              · {item.error_message.slice(0, 45)}…
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <span className={`text-xs capitalize px-2.5 py-1 rounded-full font-medium bg-secondary/50 ${sc.text}`}>
+                        {sc.label}
+                      </span>
+                      {item.status === "failed" && (
+                        <Button
+                          variant="outline" size="sm"
+                          className="text-xs h-7 border-red-300 text-red-600 hover:bg-red-50"
+                          disabled={retryingId === item.id}
+                          onClick={() => handleRetry(item.id)}
+                        >
+                          {retryingId === item.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
+                        </Button>
+                      )}
+                      {item.status === "needs_approval" && (
+                        <Button variant="outline" size="sm" className="text-xs h-7" asChild>
+                          <a href="/linkedin">Review</a>
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs capitalize px-2 py-1 rounded bg-secondary/50">
-                      {item.status.replace(/_/g, " ")}
-                    </span>
-                    {item.status === "failed" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-7 border-red-400 text-red-600 hover:bg-red-50"
-                        disabled={retryingId === item.id}
-                        onClick={() => handleRetry(item.id)}
-                      >
-                        {retryingId === item.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

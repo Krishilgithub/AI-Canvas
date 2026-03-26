@@ -1,6 +1,22 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { supabase } from "../db";
 import { AuthRequest } from "../middleware/auth.middleware";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AnalyticsDailyRow {
+  impressions: number;
+  engagement: number;
+}
+
+interface GeneratedPost {
+  id: string;
+  platform: string;
+  content: string;
+  status: string;
+  created_at: string;
+  scheduled_date?: string;
+  ai_metadata?: Record<string, unknown>;
+}
 
 class AnalyticsController {
   getOverview = async (req: AuthRequest, res: Response) => {
@@ -9,59 +25,79 @@ class AnalyticsController {
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       const { platform } = req.query;
-      
-      // 1. Total Posts
+
+      // FIX: was querying the non-existent 'posts' table — now correctly uses 'generated_posts'
+      // 1. Total Posts (all statuses)
       let postsQuery = supabase
-        .from("posts")
+        .from("generated_posts")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user_id);
       if (platform && platform !== "all") {
-        postsQuery = postsQuery.eq("platform", platform);
+        // generated_posts stores platform inside ai_metadata JSON
+        postsQuery = postsQuery.filter("ai_metadata->>platform", "eq", platform as string);
       }
       const { count: postsCount, error: postsError } = await postsQuery;
 
+      // FIX: was querying 'posts'.status = 'scheduled' — now correctly uses 'generated_posts'
       // 2. Scheduled Posts
       let scheduledQuery = supabase
-        .from("posts")
+        .from("generated_posts")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user_id)
         .eq("status", "scheduled");
       if (platform && platform !== "all") {
-        scheduledQuery = scheduledQuery.eq("platform", platform);
+        scheduledQuery = scheduledQuery.filter("ai_metadata->>platform", "eq", platform as string);
       }
       const { count: scheduledCount } = await scheduledQuery;
 
-      // 3. Total Reach (Sum of impressions from analytics table)
-      // Assuming table 'analytics_daily' with 'impressions' column
+      // 3. Awaiting Approval (needs_approval)
+      let approvalQuery = supabase
+        .from("generated_posts")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user_id)
+        .eq("status", "needs_approval");
+      if (platform && platform !== "all") {
+        approvalQuery = approvalQuery.filter("ai_metadata->>platform", "eq", platform as string);
+      }
+      const { count: approvalCount } = await approvalQuery;
+
+      // 4. Total Reach + Engagement from analytics_daily
       let analyticsQuery = supabase
         .from("analytics_daily")
         .select("impressions, engagement")
         .eq("user_id", user_id);
       if (platform && platform !== "all") {
-        analyticsQuery = analyticsQuery.eq("platform", platform);
+        analyticsQuery = analyticsQuery.eq("platform", platform as string);
       }
       const { data: analyticsData, error: analyticsError } = await analyticsQuery;
 
-      const totalReach =
-        analyticsData?.reduce(
-          (acc, curr) => acc + (curr.impressions || 0),
-          0,
-        ) || 0;
-      const totalEngagement =
-        analyticsData?.reduce((acc, curr) => acc + (curr.engagement || 0), 0) ||
-        0;
+      if (analyticsError) {
+        // analytics_daily may not exist yet — degrade gracefully
+        console.warn("[Analytics] analytics_daily query failed (table may not exist yet):", analyticsError.message);
+      }
 
-      if (postsError) console.error("Error fetching posts count:", postsError);
+      const totalReach = (analyticsData as AnalyticsDailyRow[] | null)?.reduce(
+        (acc, curr) => acc + (curr.impressions || 0), 0
+      ) || 0;
+      const totalEngagement = (analyticsData as AnalyticsDailyRow[] | null)?.reduce(
+        (acc, curr) => acc + (curr.engagement || 0), 0
+      ) || 0;
+
+      if (postsError) {
+        console.error("[Analytics] Error fetching generated_posts count:", postsError.message);
+      }
 
       res.json({
         totalPosts: postsCount || 0,
         scheduledPosts: scheduledCount || 0,
-        totalReach: totalReach,
+        needsApproval: approvalCount || 0,
+        totalReach,
         engagement: totalEngagement,
       });
-    } catch (error: any) {
-      console.error("Error in getOverview:", error);
-      res.status(500).json({ error: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Analytics] Error in getOverview:", msg);
+      res.status(500).json({ error: msg });
     }
   };
 
@@ -70,38 +106,41 @@ class AnalyticsController {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      // Fetch recent 5 posts
+      // FIX: was querying non-existent 'posts' table — now uses 'generated_posts'
       const { data: posts, error } = await supabase
-        .from("posts")
-        .select("id, platform, content, status, created_at, scheduled_date")
+        .from("generated_posts")
+        .select("id, ai_metadata, content, status, created_at, scheduled_time")
         .eq("user_id", user_id)
         .order("created_at", { ascending: false })
-        .limit(5);
+        .limit(10);
 
       if (error) throw error;
 
-      // Map to a generic activity format if needed, or return as is
-      const activities =
-        posts?.map((post) => ({
-          id: post.id,
-          type: post.status === "published" ? "post_published" : "post_created",
-          description: `Post ${post.status} on ${post.platform}`,
-          timestamp: post.created_at,
-          meta: {
-            platform: post.platform,
-            content: post.content.substring(0, 50) + "...",
-          },
-        })) || [];
+      const activities = (posts as unknown as GeneratedPost[] | null)?.map((post) => ({
+        id: post.id,
+        type: post.status === "published"
+          ? "post_published"
+          : post.status === "needs_approval"
+          ? "draft_awaiting_review"
+          : "post_created",
+        description: `Post ${post.status} on ${(post.ai_metadata as Record<string, string> | undefined)?.platform ?? "unknown"}`,
+        timestamp: post.created_at,
+        meta: {
+          platform: (post.ai_metadata as Record<string, string> | undefined)?.platform ?? "unknown",
+          status: post.status,
+          content: post.content ? post.content.substring(0, 80) + "…" : "",
+        },
+      })) || [];
 
       res.json(activities);
-    } catch (error: any) {
-      console.error("Error in getRecentActivity:", error);
-      res.status(500).json({ error: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Analytics] Error in getRecentActivity:", msg);
+      res.status(500).json({ error: msg });
     }
   };
 
   getPlatformStats = async (req: AuthRequest, res: Response) => {
-    // Placeholder for platform specific drilldown
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
@@ -119,28 +158,41 @@ class AnalyticsController {
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+
+      res.json(data || []);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
     }
   };
 
+  // ─── seedData ──────────────────────────────────────────────────────────────
+  // FIX: seedData uses Math.random() to generate fake impressions/engagement.
+  // This was also exposed as an HTTP endpoint accessible by any authenticated user —
+  // which means any user could overwrite another's analytics if user_id wasn't scoped.
+  // This endpoint should be DISABLED in production. We guard it with NODE_ENV check.
   seedData = async (req: AuthRequest, res: Response) => {
+    // Block in production — this endpoint should not exist in prod
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "seed endpoint is disabled in production. Remove this route before deploying.",
+      });
+    }
+
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      // Find user connected platforms
-      const { data: accounts, error: accountError } = await supabase
+      const { data: accounts } = await supabase
         .from("linked_accounts")
         .select("platform")
         .eq("user_id", user_id);
 
-      if (accountError) throw accountError;
-
-      const platforms = accounts?.length ? accounts.map(a => a.platform) : ["linkedin", "twitter"];
+      const platforms = accounts?.length
+        ? accounts.map((a: { platform: string }) => a.platform)
+        : ["linkedin", "twitter"];
 
       const days = 30;
       const metrics = [];
@@ -148,47 +200,33 @@ class AnalyticsController {
       for (let i = 0; i < days; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        
+
         for (const platform of platforms) {
-          // generate random plausible numbers
-          const impressions = Math.floor(Math.random() * 500) + 50;
-          const clicks = Math.floor(impressions * (Math.random() * 0.15)); // 0-15% ctr
-          const likes = Math.floor(impressions * (Math.random() * 0.10));
-          const comments = Math.floor(likes * (Math.random() * 0.3));
-          const shares = Math.floor(likes * (Math.random() * 0.1));
-          const engagement = clicks + likes + comments + shares;
+          const impressions   = Math.floor(Math.random() * 500) + 50;
+          const clicks        = Math.floor(impressions * (Math.random() * 0.15));
+          const likes         = Math.floor(impressions * (Math.random() * 0.10));
+          const comments      = Math.floor(likes      * (Math.random() * 0.30));
+          const shares        = Math.floor(likes      * (Math.random() * 0.10));
+          const engagement    = clicks + likes + comments + shares;
 
           metrics.push({
             user_id,
             platform,
-            date: date.toISOString().split('T')[0],
-            impressions,
-            clicks,
-            likes,
-            comments,
-            shares,
-            engagement
+            date: date.toISOString().split("T")[0],
+            impressions, clicks, likes, comments, shares, engagement,
           });
         }
       }
 
-      // Upsert metrics (conflict on user_id, platform, date assuming unique constraint)
-      // Since we don't know if composite key exists, we'll just delete existing and insert
-      await supabase
-        .from("analytics_daily")
-        .delete()
-        .eq("user_id", user_id);
-
-      const { error: insertError } = await supabase
-        .from("analytics_daily")
-        .insert(metrics);
-
+      await supabase.from("analytics_daily").delete().eq("user_id", user_id);
+      const { error: insertError } = await supabase.from("analytics_daily").insert(metrics);
       if (insertError) throw insertError;
 
-      res.json({ success: true, message: `Seeded ${metrics.length} records.` });
-    } catch (error: any) {
-      console.error("Seed Error:", error);
-      res.status(500).json({ error: error.message });
+      res.json({ success: true, message: `[DEV ONLY] Seeded ${metrics.length} records.` });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Analytics] Seed Error:", msg);
+      res.status(500).json({ error: msg });
     }
   };
 }

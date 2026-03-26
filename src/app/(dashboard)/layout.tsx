@@ -1,5 +1,4 @@
 import { Sidebar, MobileSidebar } from "@/components/dashboard/sidebar";
-import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { Sparkles } from "lucide-react";
 
 export default function DashboardLayout({
@@ -35,7 +34,6 @@ export default function DashboardLayout({
           <div className="max-w-6xl mx-auto space-y-8">{children}</div>
         </main>
       </div>
-      <OnboardingModal />
     </div>
   );
 }

@@ -31,7 +31,7 @@ const analyzeNode = async (state: typeof WorkflowState.State) => {
 
   const model = new ChatGoogleGenerativeAI({
     model: "gemini-2.5-flash",
-    temperature: 0.7,
+    temperature: 0.5,  // FIX: was 0.7 — lowered for more reliable strategic analysis
     apiKey,
     maxRetries: 3,
   });
@@ -54,7 +54,7 @@ const draftNode = async (state: typeof WorkflowState.State) => {
 
   const model = new ChatGoogleGenerativeAI({
     model: "gemini-2.5-flash",
-    temperature: 0.8,
+    temperature: 0.55, // FIX: was 0.8 — high temp causes hallucination of industry facts
     apiKey,
     maxRetries: 3,
   });
@@ -62,19 +62,36 @@ const draftNode = async (state: typeof WorkflowState.State) => {
   const p = state.parameters || {};
   const u = state.userContext || {};
 
-  const sysMsg = new SystemMessage(`You are an expert ghostwriter creating content for ${state.platform}.
+  // Platform-specific formatting guidance injected into the system prompt
+  const platformRules: Record<string, string> = {
+    linkedin: "Use short paragraphs, start with a strong single-line hook, end with an open question.",
+    twitter:  "HARD LIMIT: 280 characters. One punchy idea. No em-dashes. Be direct.",
+    x:        "HARD LIMIT: 280 characters. One punchy idea. No em-dashes. Be direct.",
+    reddit:   "Be authentic, detailed, and genuinely helpful. Avoid marketing language — Reddit downvotes promotional posts.",
+    instagram: "Start with a hook in the first 125 chars. Short sentences. Personal and visual.",
+    youtube:  "Engaging video description optimized for search. Include watch hook in first 2 lines.",
+  };
+  const platformGuidance = platformRules[state.platform?.toLowerCase() || "linkedin"] || platformRules.linkedin;
+
+  const sysMsg = new SystemMessage(`You are an expert ghostwriter creating authentic content for ${state.platform}.
   Author Role: ${u.role || "Professional"}
   Author Bio: ${u.bio || ""}
   Author Goals: ${u.goals || ""}
   Tone/Voice Preset: ${p.voice_preset || "Professional"}
   Professionalism Level: ${p.professionalism || "Balanced"}
   Vibe: ${p.vibe_check || "Engaging"}
+
+  PLATFORM RULES: ${platformGuidance}
+
+  CRITICAL: Do NOT fabricate statistics, study results, or specific data points not present in the provided context.
+  Write in an authentic, human voice. Avoid corporate jargon and generic filler phrases.
   `);
 
   const msg = new HumanMessage(`Write a ${p.length || "medium"} length social media post.
   Topic: ${state.topic}
   Strategy Insight: ${state.insight}
   Primary Focus: ${p.primary_focus || "General"}
+  Output ONLY the post text. No meta-commentary or quotes.
   Do not include hashtags yet.`);
 
   const response = await model.invoke([sysMsg, msg]);

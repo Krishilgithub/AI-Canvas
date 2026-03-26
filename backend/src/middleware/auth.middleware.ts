@@ -1,14 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../db';
 
+// ─── Typed user shape from Supabase auth.getUser() ───────────────────────────
+// FIX: was typed as `any` — now uses the Supabase User type to surface
+// type errors at compile time and remove implicit any throughout all controllers.
+export interface AuthenticatedUser {
+  id: string;
+  email?: string;
+  role?: string;
+  app_metadata: Record<string, unknown>;
+  user_metadata: Record<string, unknown>;
+  aud: string;
+  created_at: string;
+}
+
 export interface AuthRequest extends Request {
-  user?: any;
+  user?: AuthenticatedUser;
 }
 
 export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       return res.status(401).json({ error: 'Missing authorization header' });
     }
@@ -18,19 +31,18 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
       return res.status(401).json({ error: 'Malformed authorization header' });
     }
 
-    // specific method to get user from token
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      console.error('Auth Error:', error?.message);
+      console.error('[Auth] Token validation failed:', error?.message);
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    // Attach user to request
-    req.user = user;
+    // Attach typed user to request
+    req.user = user as AuthenticatedUser;
     next();
   } catch (error) {
-    console.error('Auth Middleware Exception:', error);
+    console.error('[Auth] Middleware exception:', error);
     res.status(500).json({ error: 'Internal server authentication error' });
   }
 };

@@ -1,0 +1,99 @@
+# Onboarding Wizard — Implementation Plan
+
+Replace the minimal 3-step modal with a **premium full-page 5-step wizard** gated behind a route guard. New users who haven't completed onboarding are redirected to `/onboarding` instead of the dashboard.
+
+---
+
+## Proposed Changes
+
+### Dashboard & Routing
+
+#### [MODIFY] [middleware.ts](file:///c:/Users/Krishil%20Agrawal/Desktop/College%20Works/SGPS/SGP6/ai-saas/src/middleware.ts)
+- Add logic: if user is authenticated **and** `onboarding_completed` is `false` in their profile, redirect to `/onboarding`
+- Allow `/onboarding` and all auth routes to pass through freely
+
+#### [MODIFY] [layout.tsx](file:///c:/Users/Krishil%20Agrawal/Desktop/College%20Works/SGPS/SGP6/ai-saas/src/app/(dashboard)/layout.tsx)
+- Remove the `<OnboardingModal />` import and usage (no longer needed)
+
+---
+
+### New Onboarding Page & Wizard
+
+#### [NEW] `src/app/onboarding/page.tsx`
+Full-page onboarding route. No sidebar, no header — clean branded canvas. Renders the `<OnboardingWizard />` component.
+
+#### [NEW] `src/app/onboarding/layout.tsx`
+Minimal layout for the `/onboarding` route — just a centered container with gradient background.
+
+#### [NEW] `src/components/onboarding/onboarding-wizard.tsx`
+The core 5-step wizard component. Each step is a separate sub-component rendered conditionally with animated transitions.
+
+**Step 1 — "Who are you?"** (`StepPersona`)
+- Role (dropdown: Founder, Marketer, Freelancer, Sales)
+- Professional Bio (textarea — used by AI for voice)
+- Why it matters callout: *"Your bio is your AI's voice. The better it knows you, the better it writes like you."*
+
+**Step 2 — "What are your goals?"** (`StepGoals`)
+- Clickable goal cards (Increase Brand Awareness, Generate Leads, Thought Leadership, Recruitment, Sales)
+- Niche / Industry input (text)
+- Keywords input (comma-separated tags)
+
+**Step 3 — "Connect your AI brain"** (`StepApiKey`)
+- Gemini API key input with masked display
+- Link to: https://makersuite.google.com/app/apikey (opens in new tab)
+- "Why do I need this?" expandable info panel
+- Badge: ✅ Verified / ❌ Invalid (calls `/api/v1/keys/save` then validates)
+- Skip option with warning: *"You can add it later in Settings. AI generation will be disabled until then."*
+
+**Step 4 — "Connect a platform"** (`StepPlatform`)
+- Platform cards: LinkedIn, Twitter, Instagram, Reddit
+- Each card shows: icon, name, status badge (Connected / Not Connected)
+- "Connect" button triggers same OAuth flow as integrations page
+- Skip option: *"You can connect platforms any time in Settings → Integrations."*
+
+**Step 5 — "You're ready!"** (`StepReady`)
+- Animated checkmark + confetti burst (CSS only)
+- Summary card: role, niche, goals count, API key status, platforms connected
+- Single CTA: **"Launch my dashboard →"**
+- On click: saves `onboarding_completed: true` to profile then redirects to `/dashboard`
+
+---
+
+### Wizard State & UX Details
+
+- **Progress bar**: thin colored bar at top (matches brand `primary` color) — [(step / 5) * 100%](file:///c:/Users/Krishil%20Agrawal/Desktop/College%20Works/SGPS/SGP6/ai-saas/extra.py#48-49) width
+- **Step indicator dots**: 5 dots at bottom, current step highlighted
+- **Back/Next navigation**: [Back](file:///c:/Users/Krishil%20Agrawal/Desktop/College%20Works/SGPS/SGP6/ai-saas/src/components/onboarding/onboarding-modal.tsx#55-56) ghost button + `Next →` primary button per step
+- **Animations**: `animate-in fade-in slide-in-from-right-4` for each step (already available via Tailwind)
+- **Keyboard support**: Enter key advances to next step
+- **Non-closeable**: No X button, no escape dismiss (same pattern as current modal)
+
+---
+
+### DB schema note
+The `profiles.onboarding_completed` column is already used in the existing modal — no migration needed. The existing [poster('/profile', { onboarding_completed: true })](file:///c:/Users/Krishil%20Agrawal/Desktop/College%20Works/SGPS/SGP6/ai-saas/src/lib/api-client.ts#69-92) pattern is reused.
+
+---
+
+## Verification Plan
+
+### Automated
+None (no test suite exists in this project). Will run `npm run build` to verify no TypeScript/build errors.
+
+```bash
+npm run build
+# Expected: no errors
+```
+
+### Manual Verification
+1. Run `npm run dev` in `ai-saas/`
+2. Sign up a **brand new test user** (use a temp email or Supabase test user)
+3. After signup → should be redirected to `/onboarding` instead of `/dashboard`
+4. Complete each of the 5 steps — verify:
+   - Step 1: role/bio fields save correctly
+   - Step 2: goal cards toggle; niche/keywords save
+   - Step 3: entering a valid Gemini key shows ✅; skipping shows warning
+   - Step 4: skipping platform shows skip warning
+   - Step 5: "Launch" redirects to `/dashboard` and the onboarding wizard never appears again
+5. Reload the page — confirm the wizard does **not** re-appear for an already-onboarded user
+6. Open Settings page — confirm bio, niche, and notification preferences reflect what was entered during onboarding
