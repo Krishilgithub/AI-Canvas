@@ -1,74 +1,118 @@
 "use client";
-import { useState, useEffect } from "react";
-import { fetcher } from "@/lib/api-client";
+import { useState, useEffect, useCallback } from "react";
+import { fetcher, poster } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  Instagram,
-  LayoutGrid,
-  Settings,
-  History,
-  Sparkles,
-  Music2,
-  TrendingUp,
-  Play,
-  Hash,
-  ChevronLeft,
-  ChevronRight,
-  MessageCircle,
-  Heart,
+  Sparkles, LayoutList, Sliders, History, ChevronLeft, ChevronRight,
+  TrendingUp, Clock, FileText, Zap, RefreshCw, ExternalLink,
+  Wifi, WifiOff, Activity, Filter, Hash, Music2, Instagram, Image as ImageIcon
 } from "lucide-react";
 import { ConfigurationPanel } from "@/components/instagram/configuration-panel";
 import { ContentApproval } from "@/components/instagram/content-approval";
+import { HistoryView } from "@/components/shared/history-view";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ScanProgressStepper, useScanStager, type ScanStage } from "@/components/dashboard/scan-progress-stepper";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Trend {
+  id: string;
+  topic: string;
+  category: string;
+  velocity_score: number;
+  created_at: string;
+  metadata?: {
+    insight?: string;
+    suggested_angle?: string;
+    type?: "audio" | "hashtag" | "format";
+    usage_count?: string;
+  };
+}
+
+interface QuotaInfo {
+  used: number;
+  limit: number | null;
+  tier: string;
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function TrendSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="h-12 bg-secondary/40 animate-pulse" />
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-6 py-4 border-t border-border/40">
+            <div className="h-4 flex-1 rounded bg-secondary/50 animate-pulse" />
+            <div className="h-4 w-20 rounded bg-secondary/50 animate-pulse" />
+            <div className="h-4 w-24 rounded bg-secondary/50 animate-pulse" />
+            <div className="h-7 w-24 rounded bg-secondary/30 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Impact bar ───────────────────────────────────────────────────────────────
+function ImpactBar({ score }: { score: number }) {
+  const color = score > 80 ? "bg-pink-500" : score > 60 ? "bg-amber-500" : "bg-muted-foreground/40";
+  const textColor = score > 80 ? "text-pink-600" : score > 60 ? "text-amber-500" : "text-muted-foreground";
+  const label = score > 80 ? "High" : score > 60 ? "Medium" : "Low";
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="h-1.5 w-20 bg-secondary rounded-full overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-700", color)} style={{ width: `${score}%` }} />
+      </div>
+      <span className={cn("text-xs font-semibold tabular-nums", textColor)}>
+        {score}/100 <span className="font-normal opacity-70">({label})</span>
+      </span>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function InstagramPage() {
   const [activeTab, setActiveTab] = useState("overview");
 
+  const tabs = [
+    { id: "overview",  label: "Overview",       icon: LayoutList },
+    { id: "approval",  label: "Review Queue",   icon: Sparkles },
+    { id: "config",    label: "Configuration",  icon: Sliders },
+    { id: "logs",      label: "History",        icon: History },
+  ];
+
   return (
-    <div
-      className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
-      suppressHydrationWarning
-    >
-      <div
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-6"
-        suppressHydrationWarning
-      >
-        <div>
-          <h1 className="text-3xl font-bold font-heading tracking-tight flex items-center gap-2">
-            <span className="bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-transparent bg-clip-text">
-              Instagram Automation
-            </span>
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Grow your visual presence with AI-curated aesthetics and trends.
-          </p>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500" suppressHydrationWarning>
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-border/50">
+        <div className="flex items-center gap-4">
+          <div className="h-11 w-11 rounded-xl bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white shrink-0 shadow-inner">
+            <Instagram className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-heading tracking-tight">Instagram Studio</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Visual growth · reels audio trends · aesthetic curation
+            </p>
+          </div>
         </div>
-        <div
-          className="flex gap-1 bg-secondary/30 p-1 rounded-lg border border-border/50 overflow-x-auto max-w-full"
-          suppressHydrationWarning
-        >
-          {[
-            { id: "overview", label: "Trends", icon: TrendingUp },
-            { id: "approval", label: "Review Queue", icon: LayoutGrid },
-            { id: "config", label: "Configuration", icon: Settings },
-            { id: "logs", label: "History", icon: History },
-          ].map((tab) => (
+
+        {/* Tab strip */}
+        <div className="flex gap-1 bg-secondary/30 p-1 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto">
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 flex items-center gap-2 whitespace-nowrap",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200",
                 activeTab === tab.id
                   ? "bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
               <tab.icon className="h-4 w-4" />
@@ -78,355 +122,379 @@ export default function InstagramPage() {
         </div>
       </div>
 
-      {activeTab === "overview" && <TrendsView />}
-      {activeTab === "approval" && <ContentApproval />}
-      {activeTab === "config" && <ConfigurationPanel />}
-      {activeTab === "logs" && <HistoryView />}
+      {activeTab === "overview"  && <TrendsView />}
+      {activeTab === "approval"  && <div className="h-[calc(100vh-220px)] overflow-hidden"><ContentApproval /></div>}
+      {activeTab === "config"    && <ConfigurationPanel />}
+      {activeTab === "logs"      && <HistoryView platform="instagram" />}
     </div>
   );
 }
 
+// ─── TrendsView ───────────────────────────────────────────────────────────────
 function TrendsView() {
-  const [trends, setTrends] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [type, setType] = useState("audio"); // audio or hashtag
+  const [trends, setTrends]         = useState<Trend[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [scanning, setScanning]     = useState(false);
+  const [scanStage, setScanStage]   = useState<ScanStage>("idle");
+  const stager                      = useScanStager(setScanStage);
+  const [page, setPage]             = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [category, setCategory]     = useState("audio");
+  const [quota, setQuota]           = useState<QuotaInfo | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [connection, setConnection] = useState<"connected" | "disconnected" | "checking">("checking");
+
+  const CATEGORIES = [
+    { id: "audio", label: "Audio", icon: Music2 },
+    { id: "hashtag", label: "Hashtags", icon: Hash },
+    { id: "format", label: "Formats", icon: ImageIcon }
+  ];
+
+  const loadTrends = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Mock data for Instagram trends (fallback pattern from previous version but structured properly)
+      await new Promise(r => setTimeout(r, 600));
+      const isAudio = category === "audio";
+      
+      const mockResult: Trend[] = isAudio ? [
+        { id: "1", topic: "Original Audio - aesthetic.vibe", category: "Reels", velocity_score: 95, created_at: new Date().toISOString(), metadata: { type: "audio", usage_count: "1.2M", suggested_angle: "Behind the scenes vlog" } },
+        { id: "2", topic: "Golden Hour instrumental", category: "Music", velocity_score: 88, created_at: new Date().toISOString(), metadata: { type: "audio", usage_count: "850K", suggested_angle: "Product showcase in sunlight" } },
+        { id: "3", topic: "Motivation Speech (Epic)", category: "Voiceover", velocity_score: 72, created_at: new Date().toISOString(), metadata: { type: "audio", usage_count: "450K", suggested_angle: "Founder story or struggle" } },
+      ] : [
+        { id: "4", topic: "#techlife", category: "Tech", velocity_score: 82, created_at: new Date().toISOString(), metadata: { type: "hashtag", usage_count: "5.4M" } },
+        { id: "5", topic: "#saasmarketing", category: "Business", velocity_score: 65, created_at: new Date().toISOString(), metadata: { type: "hashtag", usage_count: "120K" } },
+        { id: "6", topic: "#minimalistsetup", category: "Design", velocity_score: 91, created_at: new Date().toISOString(), metadata: { type: "hashtag", usage_count: "2.1M" } },
+      ];
+      
+      setTrends(mockResult);
+      setTotalPages(1);
+    } catch {
+      toast.error("Could not load trends.");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, category]);
 
   useEffect(() => {
-    // Simulate fetch
-    setLoading(true);
-    setTimeout(() => {
-      const mockAudio = [
-        {
-          id: 1,
-          title: "Original Audio - aesthetic.vibe",
-          category: "Reels",
-          velocity: 95,
-          usage: "1.2M",
-          artist: "aesthetic.vibe",
-        },
-        {
-          id: 2,
-          title: "Golden Hour",
-          category: "Music",
-          velocity: 88,
-          usage: "850K",
-          artist: "JVKE",
-        },
-        {
-          id: 3,
-          title: "Motivation Speech",
-          category: "Voiceover",
-          velocity: 72,
-          usage: "450K",
-          artist: "Success Mindset",
-        },
-      ];
-      const mockTags = [
-        {
-          id: 4,
-          title: "#techlife",
-          category: "Tech",
-          velocity: 82,
-          usage: "5.4M",
-        },
-        {
-          id: 5,
-          title: "#saasmarketing",
-          category: "Business",
-          velocity: 65,
-          usage: "120K",
-        },
-        {
-          id: 6,
-          title: "#minimalistsetup",
-          category: "Design",
-          velocity: 91,
-          usage: "2.1M",
-        },
-      ];
-      setTrends(type === "audio" ? mockAudio : mockTags);
-      setLoading(false);
-    }, 800);
-  }, [type, page]);
+    loadTrends();
+  }, [loadTrends]);
+
+  // Load meta info once
+  useEffect(() => {
+    Promise.allSettled([
+      fetcher("/automation/quota"),
+      fetcher("/posts?status=needs_approval&platform=instagram&limit=1"),
+      fetcher("/connections"),
+    ]).then(([quotaRes, pendingRes, connRes]) => {
+      if (quotaRes.status === "fulfilled") setQuota(quotaRes.value);
+      if (pendingRes.status === "fulfilled") {
+        const data = pendingRes.value;
+        setPendingCount(data?.meta?.total ?? (Array.isArray(data) ? data.length : 0));
+      }
+      if (connRes.status === "fulfilled") {
+        const conns: { platform: string }[] = Array.isArray(connRes.value) ? connRes.value : [];
+        setConnection(conns.some((c) => c.platform === "instagram") ? "connected" : "disconnected");
+      }
+    });
+  }, []);
+
+  const handleScan = async () => {
+    if (scanning) return;
+    setScanning(true);
+    try {
+      stager("fetching");
+      await new Promise((r) => setTimeout(r, 800));
+      stager("analyzing");
+      await poster("/seed?platform=instagram", {});
+      stager("drafting");
+      await new Promise((r) => setTimeout(r, 500));
+      stager("done");
+      loadTrends();
+      toast.success("Aesthetics analyzed! Visual drafts queued.");
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      stager("error");
+      toast.error("Scan failed", { description: msg });
+    } finally {
+      setTimeout(() => { setScanning(false); setScanStage("idle"); }, 2500);
+    }
+  };
+
+  const handleDraft = (trend: Trend) => {
+    toast.promise(
+      poster("/create-draft", { trend_id: trend.id, platform: "instagram" }),
+      {
+        loading: "Generating visual layout…",
+        success: 'Post generated! Check "Review Queue".',
+        error: "Failed to generate post.",
+      }
+    );
+  };
+
+  // ── Stats ────────────────────────────────────────────────────────────────
+  const topScore = trends.length ? Math.max(...trends.map((t) => t.velocity_score)) : 0;
+  const highImpactCount = trends.filter((t) => t.velocity_score > 70).length;
 
   return (
     <div className="space-y-6" suppressHydrationWarning>
-      {/* Quick Stats Row */}
-      <div
-        className="grid grid-cols-1 md:grid-cols-3 gap-6"
-        suppressHydrationWarning
-      >
-        <Card className="bg-gradient-to-br from-pink-500/5 to-transparent border-pink-500/10">
-          <CardHeader className="pb-2">
-            <CardDescription>Viral Potential</CardDescription>
-            <CardTitle className="text-2xl text-pink-500">High</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground">
-              Reels audio &quot;Golden Hour&quot; is trending.
+
+      {/* ── Stats row ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Connection status */}
+        <Card className={cn("border", connection === "connected" ? "border-green-500/20 bg-green-500/5" : "border-border")}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center",
+                connection === "connected" ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground")}>
+                {connection === "connected" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Account</p>
+                <p className={cn("text-sm font-semibold capitalize",
+                  connection === "connected" ? "text-green-600" : "text-muted-foreground")}>
+                  {connection === "checking" ? "Checking…" : connection}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Active trends */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Engagement Rate</CardDescription>
-            <CardTitle className="text-2xl">4.8%</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground flex items-center gap-1">
-              <span className="text-green-500 font-medium">↑ 1.2%</span> from
-              last week
+          <CardContent className="pt-5 pb-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+              <TrendingUp className="h-16 w-16 text-pink-500" />
             </div>
+            <div className="flex items-center gap-3 relative">
+              <div className="h-9 w-9 rounded-xl bg-pink-500/10 text-pink-500 flex items-center justify-center">
+                <Music2 className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Viral Audio</p>
+                <p className="text-xl font-bold">{loading ? "…" : trends.length}</p>
+              </div>
+            </div>
+            {highImpactCount > 0 && (
+              <p className="text-xs text-pink-600 mt-2 font-medium relative">{highImpactCount} trending tracks identified</p>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Next Scheduled</CardDescription>
-            <CardTitle className="text-2xl">18:00</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground">
-              Carousel post about &quot;AI Tools&quot;
+
+        {/* Pending approval */}
+        <Card className={cn(pendingCount > 0 && "border-amber-500/30 bg-amber-500/5")}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center",
+                pendingCount > 0 ? "bg-amber-500/10 text-amber-600" : "bg-secondary text-muted-foreground")}>
+                <ImageIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Awaiting Review</p>
+                <p className={cn("text-xl font-bold", pendingCount > 0 && "text-amber-600")}>{pendingCount}</p>
+              </div>
             </div>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-600 mt-2 font-medium">{pendingCount} carousel{pendingCount > 1 ? "s" : ""} queue</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quota */}
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <Activity className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">API Requests</p>
+                <p className="text-xl font-bold">
+                  {quota ? `${quota.used}${quota.limit ? `/${quota.limit}` : ""}` : "…"}
+                </p>
+              </div>
+            </div>
+            {quota && quota.limit && (
+              <div className="mt-2">
+                <div className="h-1 w-full rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all", quota.used / quota.limit > 0.8 ? "bg-red-500" : "bg-primary")}
+                    style={{ width: `${Math.min(100, (quota.used / quota.limit) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{quota.tier} tier</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* ── Scan Progress ─────────────────────────────────────────────── */}
+      {scanStage !== "idle" && (
+        <ScanProgressStepper
+          stage={scanStage}
+          platform="Instagram"
+          accentColor="#ec4899"
+        />
+      )}
+
+      {/* ── Trend Table ───────────────────────────────────────────────── */}
       <Card className="border-border shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
-              <CardTitle className="text-lg">Trending Now</CardTitle>
-              <CardDescription>
-                High-velocity audio and hashtags for maximum reach.
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <LayoutList className="h-4 w-4 text-pink-500" />
+                Discovery Engine
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Audio, themes, and formats algorithmically favored right now.
               </CardDescription>
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => setType("audio")}
-                  className={cn(
-                    "text-xs px-3 py-1 rounded-full border transition-colors flex items-center gap-1",
-                    type === "audio"
-                      ? "bg-pink-500 text-white border-pink-500"
-                      : "bg-background hover:bg-secondary",
-                  )}
-                >
-                  <Music2 className="h-3 w-3" /> Audio
-                </button>
-                <button
-                  onClick={() => setType("hashtag")}
-                  className={cn(
-                    "text-xs px-3 py-1 rounded-full border transition-colors flex items-center gap-1",
-                    type === "hashtag"
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-background hover:bg-secondary",
-                  )}
-                >
-                  <Hash className="h-3 w-3" /> Hashtags
-                </button>
+
+              {/* Category filters */}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground mt-1 shrink-0" />
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => { setCategory(cat.id); setPage(1); }}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full border transition-all duration-150 font-medium flex items-center gap-1.5",
+                      category === cat.id
+                        ? "bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20"
+                        : "bg-background hover:bg-secondary border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <cat.icon className="h-3 w-3" /> {cat.label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="flex gap-2">
+
+            <div className="flex gap-2 shrink-0">
+              <Button variant="ghost" size="sm" onClick={loadTrends} disabled={loading}>
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              </Button>
               <Button
-                variant="outline"
                 size="sm"
-                onClick={() => {
-                  toast.promise(
-                    new Promise((resolve) => setTimeout(resolve, 1500)),
-                    {
-                      loading: "Analyzing trends...",
-                      success: "Trends updated!",
-                      error: "Failed to update",
-                    },
-                  );
-                }}
+                onClick={handleScan}
+                disabled={scanning}
+                className="gap-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-90 text-white border-0"
               >
-                <Sparkles className="mr-2 h-4 w-4" /> Refresh Trends
+                <Sparkles className="h-4 w-4" />
+                {scanning ? "Scanning…" : "Scan Discover"}
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-md border border-border/50">
-            <table className="w-full text-sm text-left bg-background">
-              <thead className="text-muted-foreground bg-secondary/30 uppercase text-xs font-semibold">
-                <tr>
-                  <th className="px-6 py-3">Asset</th>
-                  <th className="px-6 py-3">Category</th>
-                  <th className="px-6 py-3">Velocity (Reach)</th>
-                  <th className="px-6 py-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      Scanning Instagram...
-                    </td>
-                  </tr>
-                ) : trends.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center">
-                      No trends found.
-                    </td>
-                  </tr>
-                ) : (
-                  trends.map((row, i) => (
-                    <tr
-                      key={i}
-                      className="group hover:bg-secondary/5 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          {type === "audio" ? (
-                            <div className="h-8 w-8 rounded bg-pink-100 dark:bg-pink-900/20 flex items-center justify-center text-pink-500">
-                              <Play className="h-4 w-4 fill-current" />
-                            </div>
-                          ) : (
-                            <div className="h-8 w-8 rounded bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
-                              <Hash className="h-4 w-4" />
+
+        <CardContent className="pt-0">
+          {loading ? (
+            <TrendSkeleton />
+          ) : trends.length === 0 ? (
+            <EmptyState
+              icon={TrendingUp}
+              title="No trends detected yet"
+              description="Click 'Scan Discover' to analyze the current algorithm preferences."
+              action={
+                <Button onClick={handleScan} className="gap-2 bg-gradient-to-r from-pink-500 to-rose-500 text-white border-0">
+                  <Sparkles className="h-4 w-4" /> Run First Scan
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-xl border border-border/50">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-muted-foreground bg-secondary/30 text-xs font-semibold uppercase tracking-wide">
+                    <tr>
+                      <th className="px-5 py-3">Asset</th>
+                      <th className="px-5 py-3 hidden sm:table-cell">Category</th>
+                      <th className="px-5 py-3 hidden md:table-cell">Usage Count</th>
+                      <th className="px-5 py-3">Viral Velocity</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40 bg-card">
+                    {trends.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="group hover:bg-pink-500/5 transition-colors"
+                      >
+                        <td className="px-5 py-4 max-w-xs">
+                          <div className="font-medium text-foreground leading-snug line-clamp-2">
+                            {row.topic}
+                          </div>
+                          {row.metadata?.suggested_angle && (
+                            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1 italic">
+                              ↳ {row.metadata.suggested_angle}
                             </div>
                           )}
-                          <div>
-                            <div className="font-medium text-foreground">
-                              {row.title}
-                            </div>
-                            {row.artist && (
-                              <div className="text-xs text-muted-foreground">
-                                {row.artist}
-                              </div>
+                        </td>
+                        <td className="px-5 py-4 hidden sm:table-cell">
+                          <Badge variant="outline" className="text-xs font-medium bg-pink-500/10 text-pink-600 border-pink-500/20">
+                            {row.category}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground text-xs font-mono hidden md:table-cell">
+                          {row.metadata?.usage_count || "—"}
+                        </td>
+                        <td className="px-5 py-4">
+                          {row.velocity_score > 0 ? (
+                            <ImpactBar score={row.velocity_score} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Unscored</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            {row.metadata?.insight && (
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" title={row.metadata.insight} onClick={() => toast.info(row.metadata!.insight!, { description: row.topic })}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
                             )}
+                            <Button
+                              size="sm"
+                              className="h-7 px-3 text-xs gap-1.5 bg-secondary text-foreground hover:bg-pink-500/10 hover:text-pink-600 border-border"
+                              onClick={() => handleDraft(row)}
+                            >
+                              Concept Post
+                            </Button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 rounded-full bg-secondary text-xs font-medium border border-border">
-                          {row.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp
-                            className={cn(
-                              "h-4 w-4",
-                              row.velocity > 90
-                                ? "text-green-500"
-                                : "text-yellow-500",
-                            )}
-                          />
-                          <span className="font-bold">{row.velocity}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({row.usage})
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="hover:bg-pink-500/10 hover:text-pink-500"
-                          onClick={() => {
-                            toast.success(
-                              `Using ${row.title} for next draft generation.`,
-                            );
-                          }}
-                        >
-                          Use Expected
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Page {page} of {totalPages || 1} · {trends.length} assets
+                  {topScore > 0 && <> · Max impact: <span className="font-semibold text-foreground">{topScore}/100</span></>}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1 || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages || loading}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function HistoryView() {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetcher("/api/v1/posts?platform=instagram")
-      .then((data) => {
-        // Transform posts to logs format
-        const transformed = (data.posts || []).map((post: any) => ({
-          action: `Posted: ${post.content.substring(0, 20)}...`,
-          time: new Date(post.created_at).toLocaleDateString(),
-          status: post.status === "published" ? "Success" : post.status,
-          type: "reel", // simplistic assumption
-        }));
-        setLogs(transformed);
-      })
-      .catch((e) => console.error(e))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>History</CardTitle>
-        <CardDescription>Recent automated actions.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {loading ? (
-            <div className="text-center py-4">Loading history...</div>
-          ) : logs.length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground">
-              No recent history.
-            </div>
-          ) : (
-            logs.map((log, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "h-8 w-8 rounded-full flex items-center justify-center",
-                      log.type === "reel"
-                        ? "bg-purple-100 text-purple-600"
-                        : log.type === "dm"
-                          ? "bg-blue-100 text-blue-600"
-                          : log.type === "engagement"
-                            ? "bg-pink-100 text-pink-600"
-                            : "bg-gray-100 text-gray-600",
-                    )}
-                  >
-                    {log.type === "reel" && <Play className="h-4 w-4" />}
-                    {log.type === "dm" && <MessageCircle className="h-4 w-4" />}
-                    {log.type === "engagement" && <Heart className="h-4 w-4" />}
-                    {log.type === "system" && <Settings className="h-4 w-4" />}
-                  </div>
-                  <span className="font-medium text-sm">{log.action}</span>
-                </div>
-                <div className="flex items-center gap-4 text-xs">
-                  <span className="text-muted-foreground">{log.time}</span>
-                  <span
-                    className={cn(
-                      "px-2 py-0.5 rounded-full font-medium border",
-                      log.status === "Success"
-                        ? "bg-green-500/10 text-green-600 border-green-500/20"
-                        : "bg-red-500/10 text-red-600 border-red-500/20",
-                    )}
-                  >
-                    {log.status}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

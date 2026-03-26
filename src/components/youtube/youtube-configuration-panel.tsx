@@ -1,435 +1,640 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { fetcher, poster } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { X, Plus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  X, Plus, AlertCircle, CheckCircle2, Loader2,
+  Target, Clock, Info, Sparkles, Zap, Brain, PlaySquare
+} from "lucide-react";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface Connection {
+  platform: string;
+  user_id?: string;
+  status?: string;
+}
+
+// ─── Tooltip helper ──────────────────────────────────────────────────────────
+function Tooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+      {show && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 px-3 py-2 text-xs rounded-lg bg-popover text-popover-foreground shadow-lg border border-border leading-relaxed pointer-events-none">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ─── Section header with optional badge ─────────────────────────────────────
+function SectionLabel({
+  label, tooltip, badge,
+}: { label: string; tooltip?: string; badge?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label className="text-sm font-medium">{label}</Label>
+      {tooltip && <Tooltip text={tooltip} />}
+      {badge && (
+        <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{badge}</Badge>
+      )}
+    </div>
+  );
+}
+
+// ─── YouTube SVG icon ─────────────────────────────────────────────────────────
+function YouTubeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
 export function YouTubeConfigurationPanel() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [connection, setConnection] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<"content" | "schedule">("content");
+  const [connection, setConnection] = useState<Connection | null>(null);
 
-  // Config State
-  const [niches, setNiches] = useState<string[]>([]);
-  const [contentPillars, setContentPillars] = useState<string[]>([]);
+  // ── Content Strategy ──
+  const [topics, setTopics] = useState<string[]>([]);
+  const [keywords, setKeywords] = useState("");
+  const [currentTopic, setCurrentTopic] = useState("");
 
-  // Video Strategy
-  const [formatPreference, setFormatPreference] = useState<
-    "mixed" | "shorts" | "long-form"
-  >("mixed");
-  const [scriptStyle, setScriptStyle] = useState<
-    "educational" | "storytelling" | "fast-paced" | "deep-dive"
-  >("educational");
+  // ── Tone ──
+  const [professionalism, setProfessionalism] = useState([50]);
+  const [voicePreset, setVoicePreset] = useState("tutorial");
 
-  // SEO
-  const [autoTags, setAutoTags] = useState(true);
-  const [smartDescriptions, setSmartDescriptions] = useState(true);
+  // ── Schedule & Automation ──
+  const [frequency, setFrequency] = useState("weekly");
+  const [smartScheduling, setSmartScheduling] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(true);
+  const [autoPostEnabled, setAutoPostEnabled] = useState(false);
+  const [preferredTime, setPreferredTime] = useState("17:00");
+  const [timezone, setTimezone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  );
+  const [format, setFormat] = useState("shorts");
 
-  // Schedule
-  const [frequency, setFrequency] = useState("daily");
-
+  // ── Load existing config ──
   useEffect(() => {
-    loadConfig();
-    checkConnection();
+    Promise.all([
+      fetcher("/connections"),
+      fetcher("/config?platform=youtube").catch(() => null),
+    ]).then(([conns, config]) => {
+      const lnk = Array.isArray(conns)
+        ? conns.find((c: Connection) => c.platform === "youtube")
+        : null;
+      setConnection(lnk || null);
+
+      if (config) {
+        setTopics(config.niches || []);
+        setKeywords(
+          Array.isArray(config.keywords)
+            ? config.keywords.join(", ")
+            : config.keywords || ""
+        );
+        if (config.tone_profile) {
+          setProfessionalism([config.tone_profile.professionalism ?? 50]);
+          setVoicePreset(config.tone_profile.voice || "tutorial");
+        }
+        if (config.schedule_cron === "0 17 * * 5") setFrequency("weekly");
+        else if (config.schedule_cron === "0 17 * * 2,5") setFrequency("twice_weekly");
+        else if (config.frequency) setFrequency(config.frequency);
+
+        setSmartScheduling(config.smart_scheduling ?? false);
+        setRequireApproval(config.require_approval ?? true);
+        if (config.preferred_time) setPreferredTime(config.preferred_time);
+        if (config.timezone) setTimezone(config.timezone);
+        setAutoPostEnabled(config.auto_post_enabled ?? false);
+        if (config.video_format) setFormat(config.video_format);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
-  async function checkConnection() {
-    try {
-      const { data } = await fetcher("/api/auth/youtube/status"); // Mock endpoint check
-      setConnection(data);
-    } catch {
-      console.log("Not connected to YouTube");
+  const handleAddTopic = () => {
+    const trimmed = currentTopic.trim();
+    if (trimmed && !topics.includes(trimmed)) {
+      setTopics([...topics, trimmed]);
+      setCurrentTopic("");
     }
-  }
+  };
 
-  async function loadConfig() {
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const data = await fetcher("/config?platform=youtube").catch(() => null);
-      if (data) {
-        setNiches(data.niches || []);
-        setContentPillars(data.keywords || []); // Reuse keywords field for pillars
-
-        // Parse custom fields if stored in a generic JSON column,
-        // OR map them to existing fields if possible.
-        // For now, we might need to store these in the generic config or add fields.
-        // Since we didn't add schema fields, we'll map:
-        // formatPreference -> mapped to `tone_profile` or similar if needed,
-        // but ideally we should've added fields.
-        // For MVP, lets assume we save them in the generic `tone_profile` JSON if it exists,
-        // or just plain logic.
-        // WAIT: The plan said "No schema changes".
-        // Use `tone_profile` JSON column for these specific settings.
-
-        if (data.tone_profile) {
-          try {
-            // If it's a string, parse it
-            const profile =
-              typeof data.tone_profile === "string"
-                ? JSON.parse(data.tone_profile)
-                : data.tone_profile;
-
-            if (profile.formatPreference)
-              setFormatPreference(profile.formatPreference);
-            if (profile.scriptStyle) setScriptStyle(profile.scriptStyle);
-          } catch (e) {
-            // Fallback
-          }
-        }
-
-        if (data.auto_retweet !== undefined) setAutoTags(data.auto_retweet); // Reuse auto_retweet for auto_tags
-        if (data.smart_scheduling !== undefined)
-          setSmartDescriptions(data.smart_scheduling); // Reuse for smart_desc
-        if (data.schedule_cron) setFrequency(data.schedule_cron);
-      }
-    } catch {
-      console.error("Failed to load config");
-    }
-  }
-
-  async function handleSave() {
-    try {
-      setSaving(true);
-
-      // Pack extra fields into tone_profile
-      const toneProfileData = {
-        formatPreference,
-        scriptStyle,
-      };
-
-      await poster("/automation/config", {
+      const cron = frequency === "twice_weekly" ? "0 17 * * 2,5" : "0 17 * * 5";
+      await poster("/config", {
         platform: "youtube",
-        niches,
-        keywords: contentPillars,
-        tone_profile: JSON.stringify(toneProfileData), // Store as JSON string
-        schedule_cron: frequency,
-        smart_scheduling: smartDescriptions, // Mapping
-        auto_retweet: autoTags, // Mapping
-        require_approval: true, // Default
+        niches: topics,
+        keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean),
+        tone_profile: { professionalism: professionalism[0], voice: voicePreset },
+        schedule_cron: cron,
+        smart_scheduling: smartScheduling,
+        require_approval: requireApproval,
+        frequency: frequency === "twice_weekly" ? "weekly" : frequency,
+        preferred_time: preferredTime,
+        timezone,
+        auto_post_enabled: autoPostEnabled,
+        video_format: format,
       });
-      toast.success("YouTube configuration saved");
+      toast.success("Configuration saved!");
     } catch {
-      toast.error("Failed to save configuration");
+      toast.error("Failed to save settings");
     } finally {
       setSaving(false);
     }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
-  // Helper for array inputs
-  const addItem = (
-    item: string,
-    list: string[],
-    setList: (l: string[]) => void,
-  ) => {
-    if (item && !list.includes(item)) {
-      setList([...list, item]);
-    }
-  };
+  const FORMAT_OPTIONS = [
+    { id: "shorts", label: "YouTube Shorts", icon: "📱", desc: "< 60 seconds vertical." },
+    { id: "longform", label: "Long-form", icon: "📺", desc: "Detailed 5-15 minute videos." },
+  ];
 
-  const removeItem = (
-    item: string,
-    list: string[],
-    setList: (l: string[]) => void,
-  ) => {
-    setList(list.filter((i) => i !== item));
-  };
+  const VOICE_PRESETS = [
+    {
+      id: "tutorial",
+      label: "Tutorial / How-to",
+      emoji: "🛠",
+      desc: "Step-by-step guidance, screen recording scripts, clear structure.",
+    },
+    {
+      id: "essay",
+      label: "Video Essay",
+      emoji: "📖",
+      desc: "Cinematic narrative, deep research, analytical tone.",
+    },
+    {
+      id: "vlog",
+      label: "Vlog / Casual",
+      emoji: "🎥",
+      desc: "Face-to-camera, energetic pacing, jump cuts.",
+    },
+  ];
+
+  const FREQUENCY_OPTIONS = [
+    {
+      id: "daily",
+      label: "Daily (Shorts)",
+      sublabel: "Good for rapid growth",
+      icon: "⚡",
+    },
+    {
+      id: "twice_weekly",
+      label: "Twice a week",
+      sublabel: "Standard for creators",
+      icon: "📺",
+    },
+    {
+      id: "weekly",
+      label: "Once weekly",
+      sublabel: "Best for high-production",
+      icon: "📅",
+    },
+  ];
+
+  const POPULAR_TIMEZONES = [
+    "America/New_York",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Europe/Berlin",
+    "Asia/Kolkata",
+    "Asia/Singapore",
+    "Australia/Sydney",
+  ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-20">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground">
-            YouTube Studio
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Automate your Shorts and Long-form video strategy.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Connection Status */}
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            Status:{" "}
-            <span
-              className={
-                connection
-                  ? "text-green-500 flex items-center gap-1"
-                  : "text-amber-500 flex items-center gap-1"
-              }
-            >
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl mx-auto pb-20">
+      {/* ── Connection header ──────────────────────────────────────────── */}
+      <div className="bg-card border rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="h-11 w-11 bg-red-600/10 flex items-center justify-center rounded-full text-red-600 shrink-0">
+            <YouTubeIcon className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold">YouTube Integration</h2>
               {connection ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4" /> Connected
-                </>
+                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 gap-1 text-xs">
+                  <CheckCircle2 className="h-3 w-3" /> Active
+                </Badge>
               ) : (
-                <>
-                  <AlertCircle className="h-4 w-4" /> Not Connected
-                </>
-              )}
-            </span>
-          </CardTitle>
-          <CardDescription>
-            {connection
-              ? `Connected as ${connection.channelTitle}`
-              : "Connect your YouTube channel to enable auto-uploads."}
-          </CardDescription>
-        </CardHeader>
-        {!connection && (
-          <CardContent>
-            <Button variant="secondary" className="w-full sm:w-auto">
-              Connect YouTube Channel
-            </Button>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Content Strategy */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Content Strategy</CardTitle>
-          <CardDescription>Define what your channel is about.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Niches */}
-          <div className="space-y-2">
-            <Label>Niches / Topics</Label>
-            <div className="flex flex-wrap gap-2 mb-2 p-3 bg-muted/20 rounded-md min-h-[40px]">
-              {niches.map((niche) => (
-                <Badge
-                  key={niche}
-                  variant="secondary"
-                  className="px-3 py-1 flex items-center gap-1"
-                >
-                  {niche}
-                  <X
-                    className="h-3 w-3 cursor-pointer hover:text-destructive"
-                    onClick={() => removeItem(niche, niches, setNiches)}
-                  />
-                </Badge>
-              ))}
-              {niches.length === 0 && (
-                <span className="text-sm text-muted-foreground italic">
-                  No niches added yet.
-                </span>
+                <Badge variant="destructive" className="text-xs">Disconnected</Badge>
               )}
             </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a niche (e.g. 'Tech Reviews', 'Cooking')"
-                id="niche-input"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    addItem(e.currentTarget.value, niches, setNiches);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const input = document.getElementById(
-                    "niche-input",
-                  ) as HTMLInputElement;
-                  addItem(input.value, niches, setNiches);
-                  input.value = "";
-                }}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              {connection
+                ? `Connected channel: ${connection.user_id?.substring(0, 10) ?? "—"}…`
+                : "Not connected. Go to Integrations to link your channel."}
+            </p>
           </div>
-
-          {/* Content Pillars */}
-          <div className="space-y-2">
-            <Label>Content Pillars</Label>
-            <div className="flex flex-wrap gap-2 mb-2 p-3 bg-muted/20 rounded-md min-h-[40px]">
-              {contentPillars.map((pillar) => (
-                <Badge
-                  key={pillar}
-                  variant="outline"
-                  className="px-3 py-1 flex items-center gap-1 border-primary/20 bg-primary/5 text-primary"
-                >
-                  {pillar}
-                  <X
-                    className="h-3 w-3 cursor-pointer hover:text-destructive"
-                    onClick={() =>
-                      removeItem(pillar, contentPillars, setContentPillars)
-                    }
-                  />
-                </Badge>
-              ))}
-              {contentPillars.length === 0 && (
-                <span className="text-sm text-muted-foreground italic">
-                  No content pillars defined.
-                </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a pillar (e.g. 'Tutorials', 'Vlogs')"
-                id="pillar-input"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    addItem(
-                      e.currentTarget.value,
-                      contentPillars,
-                      setContentPillars,
-                    );
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const input = document.getElementById(
-                    "pillar-input",
-                  ) as HTMLInputElement;
-                  addItem(input.value, contentPillars, setContentPillars);
-                  input.value = "";
-                }}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Video Strategy */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Format Preferences</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Primary Focus</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {["mixed", "shorts", "long-form"].map((f) => (
-                  <div
-                    key={f}
-                    onClick={() => setFormatPreference(f as any)}
-                    className={`cursor-pointer border rounded-md p-3 text-center text-sm font-medium transition-all ${formatPreference === f ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
-                  >
-                    {f === "mixed"
-                      ? "Mixed"
-                      : f === "shorts"
-                        ? "Shorts"
-                        : "Long Form"}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Script Style</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tone</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {["educational", "storytelling", "fast-paced", "deep-dive"].map(
-                  (s) => (
-                    <div
-                      key={s}
-                      onClick={() => setScriptStyle(s as any)}
-                      className={`cursor-pointer border rounded-md p-2 text-center text-xs font-medium transition-all ${scriptStyle === s ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
-                    >
-                      {s
-                        .split("-")
-                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                        .join(" ")}
-                    </div>
-                  ),
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push("/integrations")}
+          className={!connection ? "border-red-600 text-red-600 hover:bg-red-600/5" : ""}
+        >
+          {connection ? "Manage Channel" : "Connect Channel"}
+        </Button>
       </div>
 
-      {/* Optimization */}
-      <Card>
-        <CardHeader>
-          <CardTitle>SEO & Optimization</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base">Auto-Generate Tags</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically generate relevant YouTube tags based on content.
-              </p>
-            </div>
-            <Switch checked={autoTags} onCheckedChange={setAutoTags} />
-          </div>
+      {/* ── Tab switcher ───────────────────────────────────────────────── */}
+      <div className="flex gap-1 bg-secondary/30 p-1 rounded-xl border border-border w-fit">
+        {[
+          { id: "content", label: "Video Types", icon: Target, desc: "Format, topics, tone" },
+          { id: "schedule", label: "Publishing", icon: Clock, desc: "Schedule and auto-post" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActiveTab(t.id as "content" | "schedule")}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeTab === t.id
+                ? "bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+            )}
+          >
+            <t.icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base">Smart Descriptions</Label>
-              <p className="text-sm text-muted-foreground">
-                Enhance descriptions with chapters, social links, and SEO
-                keywords.
-              </p>
-            </div>
-            <Switch
-              checked={smartDescriptions}
-              onCheckedChange={setSmartDescriptions}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Schedule */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload Schedule</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <Label>Frequency</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {["daily", "weekly", "bi-weekly", "monthly"].map((freq) => (
-                <div
-                  key={freq}
-                  onClick={() => setFrequency(freq)}
-                  className={`cursor-pointer border rounded-md p-3 text-center text-sm font-medium ${frequency === freq ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
-                >
-                  {freq.charAt(0).toUpperCase() + freq.slice(1)}
+      {/* ══════════════════════════════════════════════════════════════════
+         TAB 1: CONTENT
+      ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === "content" && (
+        <div className="grid lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-2 duration-300">
+          {/* Content Strategy */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-red-600" />
+                Channel Focus
+              </CardTitle>
+              <CardDescription>
+                Help AI generate scripts and titles tailored to your niche.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Format Select */}
+              <div className="space-y-3">
+                <SectionLabel
+                  label="Target Format"
+                  tooltip="The AI will optimize generated scripts either for high-retention Shorts or in-depth Long-form content."
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  {FORMAT_OPTIONS.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFormat(f.id)}
+                      className={cn(
+                        "p-3 rounded-xl border text-left transition-all duration-200",
+                        format === f.id
+                          ? "border-red-600 bg-red-600/5 ring-1 ring-red-600"
+                          : "border-border hover:border-red-600/40 hover:bg-secondary/40"
+                      )}
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="text-xl leading-none">{f.icon}</span>
+                        {format === f.id && <CheckCircle2 className="h-4 w-4 text-red-600" />}
+                      </div>
+                      <div className="mt-2 font-medium text-sm">{f.label}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{f.desc}</div>
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* Niches */}
+              <div className="space-y-3">
+                <SectionLabel
+                  label="Core Subjects"
+                  tooltip="Main topics you cover. AI pulls trending queries related to these subjects to pitch video ideas."
+                />
+                <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                  {topics.map((n) => (
+                    <Badge key={n} variant="secondary" className="px-2.5 py-1 text-xs gap-1.5">
+                      {n}
+                      <X
+                        className="h-3 w-3 cursor-pointer opacity-60 hover:opacity-100"
+                        onClick={() => setTopics(topics.filter((x) => x !== n))}
+                      />
+                    </Badge>
+                  ))}
+                  {topics.length === 0 && (
+                    <span className="text-xs text-muted-foreground italic">
+                      No topics added yet.
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder='e.g. "Mechanical Keyboards" or "React JS"'
+                    value={currentTopic}
+                    onChange={(e) => setCurrentTopic(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddTopic()}
+                    className="h-9 text-sm"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={handleAddTopic}
+                    disabled={!currentTopic.trim()}
+                    size="sm"
+                    className="shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Keywords */}
+              <div className="space-y-2">
+                <SectionLabel
+                  label="Search Keywords (SEO)"
+                  tooltip="Comma-separated. Influences the tags, titles, and descriptions generated by the AI to maximize click-through rate."
+                />
+                <Input
+                  placeholder="e.g. coding tutorial, fast compile, rust vs c++"
+                  value={keywords}
+                  onChange={(e) => setKeywords(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tone & Voice */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-red-600" />
+                Script Template
+              </CardTitle>
+              <CardDescription>
+                Direct the AI on how to structure the pacing and vocabulary of your scripts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-7">
+              {/* Pacing slider */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <SectionLabel
+                    label="Pacing Speed"
+                    tooltip="High retention (fast) creates dense scripts with frequent visual cue changes. Slow creates relaxed, conversational scripts."
+                  />
+                  <span className={cn(
+                    "text-xs font-semibold px-2 py-0.5 rounded-full",
+                    professionalism[0] > 70
+                      ? "bg-red-500/10 text-red-600"
+                      : professionalism[0] < 30
+                      ? "bg-blue-500/10 text-blue-600"
+                      : "bg-green-500/10 text-green-600"
+                  )}>
+                    {professionalism[0] > 70 ? "High Retention" : professionalism[0] < 30 ? "Relaxed/Slow" : "Standard pacing"}
+                  </span>
+                </div>
+                <Slider
+                  value={professionalism}
+                  onValueChange={setProfessionalism}
+                  max={100}
+                  step={1}
+                  className="py-1"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground px-0.5">
+                  <span>🐢 Casual/Slow</span>
+                  <span>🔥 High Retention</span>
+                </div>
+              </div>
+
+              {/* Voice presets */}
+              <div className="space-y-3">
+                <SectionLabel
+                  label="Direction Style"
+                  tooltip="Defines the standard format of your script generation. Tutorials will have step-by-step markers. Essays will have narrative arcs."
+                />
+                <div className="grid gap-2">
+                  {VOICE_PRESETS.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setVoicePreset(v.id)}
+                      className={cn(
+                        "flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-200",
+                        voicePreset === v.id
+                          ? "border-red-600 bg-red-600/5 ring-1 ring-red-600"
+                          : "border-border hover:border-red-600/40 hover:bg-secondary/40"
+                      )}
+                    >
+                      <span className="text-xl shrink-0 mt-0.5">{v.emoji}</span>
+                      <div>
+                        <div className="text-sm font-semibold flex items-center gap-2">
+                          {v.label}
+                          {voicePreset === v.id && (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-red-600" />
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{v.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+         TAB 2: PUBLISHING
+      ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === "schedule" && (
+        <div className="grid lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-2 duration-300">
+          {/* Posting Frequency */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-red-600" />
+                Upload Consistency
+              </CardTitle>
+              <CardDescription>
+                How often AI Canvas should generate new video drafts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFrequency(opt.id)}
+                  className={cn(
+                    "w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all duration-200",
+                    frequency === opt.id
+                      ? "border-red-600 bg-red-600/5 ring-1 ring-red-600"
+                      : "border-border hover:border-red-600/40 hover:bg-secondary/30"
+                  )}
+                >
+                  <span className="text-xl shrink-0">{opt.icon}</span>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">{opt.label}</div>
+                    <div className="text-xs text-muted-foreground">{opt.sublabel}</div>
+                  </div>
+                  <div className={cn(
+                    "h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center",
+                    frequency === opt.id ? "border-red-600 bg-red-600" : "border-border"
+                  )}>
+                    {frequency === opt.id && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
               ))}
-            </div>
+            </CardContent>
+          </Card>
+
+          {/* Automation & Approval */}
+          <div className="space-y-4">
+            {/* Auto-Pilot */}
+            <Card className={cn(autoPostEnabled && "border-amber-500/30 bg-amber-500/5")}>
+              <CardContent className="pt-5 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <SectionLabel
+                      label="Automated Uploading"
+                      badge="API Only"
+                      tooltip="When ON, approved videos are uploaded automatically via YouTube Data API to the schedule programmed below."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {autoPostEnabled
+                        ? "✅ Videos will be pushed directly to your channel."
+                        : "Only generating scripts. You must create & upload manually."}
+                    </p>
+                  </div>
+                  <Switch checked={autoPostEnabled} onCheckedChange={setAutoPostEnabled} />
+                </div>
+
+                {autoPostEnabled && (
+                  <div className="space-y-3 pt-1 border-t border-amber-500/20">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Preferred Publish Hour</Label>
+                      <Input
+                        type="time"
+                        value={preferredTime}
+                        onChange={(e) => setPreferredTime(e.target.value)}
+                        className="h-9 text-sm"
+                        disabled={smartScheduling}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        Timezone
+                      </Label>
+                      <select
+                        value={timezone}
+                        onChange={(e) => setTimezone(e.target.value)}
+                        className="w-full h-9 text-sm rounded-md border border-input bg-background px-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        {POPULAR_TIMEZONES.includes(timezone) ? null : (
+                          <option value={timezone}>{timezone} (current)</option>
+                        )}
+                        {POPULAR_TIMEZONES.map((tz) => (
+                          <option key={tz} value={tz}>{tz}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Approval Gate */}
+            <Card>
+              <CardContent className="pt-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <SectionLabel
+                      label="Require Human Approval"
+                      tooltip="Force all AI script drafts or finished videos to halt in the Review Queue. Required for YouTube since video assets need assembly."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-green-600">🛡 Safest</span> — you have final cut.
+                    </p>
+                  </div>
+                  <Switch checked={requireApproval} onCheckedChange={setRequireApproval} disabled={true} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Summary card */}
+            <Card className="bg-secondary/20 border-dashed">
+              <CardContent className="pt-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                  <PlaySquare className="h-3.5 w-3.5 opacity-50 text-red-600" /> Channel Config Recap
+                </p>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Video Target</span>
+                    <span className="font-medium capitalize">{format}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Frequency</span>
+                    <span className="font-medium capitalize">{frequency.replace("_", " ")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Auto-upload</span>
+                    <span className={cn("font-medium", autoPostEnabled ? "text-amber-600" : "text-muted-foreground")}>
+                      {autoPostEnabled ? "On" : "Off"}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* ── Sticky Save bar ───────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 sticky bottom-6 bg-background/80 backdrop-blur-sm border border-border rounded-xl px-5 py-3 shadow-lg">
+        <p className="text-xs text-muted-foreground hidden sm:block">
+          Changes apply to all future AI-generated scripts and videos.
+        </p>
+        <div className="flex gap-3 ml-auto">
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Discard
+          </Button>
+          <Button onClick={handleSave} disabled={saving} className="min-w-[120px] bg-red-600 hover:bg-red-700 text-white border-0">
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+            ) : (
+              "Save Configuration"
+            )}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

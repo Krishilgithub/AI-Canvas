@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 const isProd = process.env.NODE_ENV === "production";
 export const API_BASE = isProd 
   ? "https://ai-canvass.vercel.app/api/v1/automation" 
-  : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1/automation");
+  : "http://localhost:4000/api/v1/automation";
 
 async function getHeaders() {
   const supabase = createClient();
@@ -34,7 +34,7 @@ function getFullUrl(url: string) {
   const isProd = process.env.NODE_ENV === "production";
   const BACKEND_URL = isProd 
     ? "https://ai-canvass.vercel.app" 
-    : (process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1/automation", "") || "http://localhost:4000");
+    : "http://localhost:4000";
 
   if (url.startsWith("http")) return url;
   if (url.startsWith("/api/")) return `${BACKEND_URL}${url}`;
