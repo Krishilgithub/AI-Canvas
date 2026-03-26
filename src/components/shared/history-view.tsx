@@ -17,19 +17,21 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Clock, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Info, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RemixModal } from "./remix-modal";
 
 interface HistoryViewProps {
   platform: string;
 }
 
 export function HistoryView({ platform }: HistoryViewProps) {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [selectedPost, setSelectedPost] = useState<any | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Record<string, any> | null>(null);
+  const [remixPost, setRemixPost] = useState<Record<string, any> | null>(null);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -86,6 +88,20 @@ export function HistoryView({ platform }: HistoryViewProps) {
                   </div>
                   
                   <div className="flex items-center gap-4 mt-2 sm:mt-0">
+                    {log.status === "published" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 h-8 text-xs font-semibold"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRemixPost(log);
+                        }}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                        Remix
+                      </Button>
+                    )}
                     <span
                       className={cn(
                         "px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border",
@@ -185,6 +201,13 @@ export function HistoryView({ platform }: HistoryViewProps) {
           )}
         </DialogContent>
       </Dialog>
+      
+      {/* Remix Modal */}
+      <RemixModal 
+        isOpen={!!remixPost} 
+        onClose={() => setRemixPost(null)} 
+        post={remixPost}
+      />
     </>
   );
 }

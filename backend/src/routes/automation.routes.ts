@@ -77,6 +77,7 @@ router.delete("/team/:id", requireAuth, controller.removeTeamMember);
 router.post("/trigger-post", requireAuth, validate(triggerPostSchema), controller.triggerPost);
 router.post("/seed", requireAuth, controller.seedData);
 router.post("/generate-manual", requireAuth, controller.generateManualPost);
+router.post("/remix", requireAuth, controller.remixPost);
 router.get("/quota", requireAuth, controller.getQuotaStatus);
 
 // Vercel Cron endpoints (Auth handled inside via CRON_SECRET)

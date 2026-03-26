@@ -87,12 +87,43 @@ class AnalyticsController {
         console.error("[Analytics] Error fetching generated_posts count:", postsError.message);
       }
 
+      // 5. Calculate Posting Streak (consecutive days with a published post)
+      let postingStreak = 0;
+      const { data: streakData } = await supabase
+        .from("generated_posts")
+        .select("created_at")
+        .eq("user_id", user_id)
+        .eq("status", "published")
+        .order("created_at", { ascending: false });
+
+      if (streakData && streakData.length > 0) {
+        const dates = [...new Set(streakData.map(d => new Date(d.created_at).toISOString().split('T')[0]))].sort().reverse();
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const todayStr = today.toISOString().split('T')[0];
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (dates[0] === todayStr || dates[0] === yesterdayStr) {
+           const expectedDate = new Date(dates[0]);
+           for (const dateStr of dates) {
+             if (dateStr === expectedDate.toISOString().split('T')[0]) {
+               postingStreak++;
+               expectedDate.setDate(expectedDate.getDate() - 1);
+             } else {
+               break;
+             }
+           }
+        }
+      }
+
       res.json({
         totalPosts: postsCount || 0,
         scheduledPosts: scheduledCount || 0,
         needsApproval: approvalCount || 0,
         totalReach,
         engagement: totalEngagement,
+        postingStreak,
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);

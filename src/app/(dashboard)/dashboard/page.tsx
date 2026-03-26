@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
-  ArrowUpRight,
   CheckCircle2,
   Clock,
   Users,
@@ -29,6 +28,7 @@ import {
 } from "@/components/dashboard/scan-progress-stepper";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 
 interface QuotaInfo {
   used: number;
@@ -82,6 +82,7 @@ export default function DashboardPage() {
           total_reach: overviewRes.totalReach,
           engagement_rate: overviewRes.engagement + "%",
           published_this_week: overviewRes.totalPosts,
+          posting_streak: overviewRes.postingStreak || 0,
           pending_approvals: activityRes?.filter((a: ActivityItem) => a.status === "needs_approval").length ?? 0,
           failed_posts: activityRes?.filter((a: ActivityItem) => a.status === "failed").length ?? 0,
         },
@@ -157,11 +158,54 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold font-heading tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back! Here&apos;s what&apos;s happening today.</p>
         </div>
-        <Button onClick={handleRunScan} disabled={scanning} className="gap-2">
-          {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+        <Button onClick={handleRunScan} disabled={scanning} className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+          {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
           {scanning ? "Scanning…" : "Run Quick Scan"}
         </Button>
       </div>
+
+      {/* ── Gamified Onboarding Banner ── */}
+      {(!hasConnections || !quota || Number(m.published_this_week) === 0) && (
+        <Card className="border-indigo-500/20 bg-gradient-to-br from-blue-600 to-indigo-700 shadow-xl overflow-hidden relative">
+          {/* Background pattern */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
+          <CardContent className="pt-6 relative z-10 text-white">
+            <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white tracking-tight">Welcome to AI Canvas! Let&apos;s get you set up.</h3>
+                  <Badge className="bg-white/20 text-white border-white/10 hover:bg-white/30 backdrop-blur-sm">
+                    {Math.round(((!hasConnections ? 0 : 33) + (!quota ? 0 : 33) + (Number(m.published_this_week) === 0 ? 0 : 34)))}% Complete
+                  </Badge>
+                </div>
+                <p className="text-sm text-indigo-100">
+                  Complete these quick steps to fully unlock autonomous social media growth.
+                </p>
+              </div>
+              <div className="w-full sm:w-1/3 min-w-[200px] flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium text-white/90">
+                  <span className="flex items-center gap-1.5"><span className={cn("h-3 w-3 rounded-full flex items-center justify-center border", quota ? "bg-white border-white" : "border-white/40")}>{quota && <CheckCircle2 className="h-2 w-2 text-indigo-600" />}</span> LLM Key</span>
+                  <span className="flex items-center gap-1.5"><span className={cn("h-3 w-3 rounded-full flex items-center justify-center border", hasConnections ? "bg-white border-white" : "border-white/40")}>{hasConnections && <CheckCircle2 className="h-2 w-2 text-indigo-600" />}</span> Connection</span>
+                  <span className="flex items-center gap-1.5"><span className={cn("h-3 w-3 rounded-full flex items-center justify-center border", Number(m.published_this_week) > 0 ? "bg-white border-white" : "border-white/40")}>{Number(m.published_this_week) > 0 && <CheckCircle2 className="h-2 w-2 text-indigo-600" />}</span> 1st Post</span>
+                </div>
+                <Progress value={(!hasConnections ? 0 : 33) + (!quota ? 0 : 33) + (Number(m.published_this_week) === 0 ? 0 : 34)} className="h-2 bg-black/20 [&>div]:bg-white" />
+              </div>
+            </div>
+            
+            <div className="grid sm:grid-cols-3 gap-3 mt-5">
+              <Button variant="outline" size="sm" className={cn("justify-start border-white/20 text-white hover:bg-white/10 hover:text-white bg-white/5 backdrop-blur-sm", quota && "opacity-50 pointer-events-none")} asChild>
+                <a href="/settings?tab=llm">{quota ? "✓ API Key Added" : "1. Add LLM API Key"}</a>
+              </Button>
+              <Button variant="outline" size="sm" className={cn("justify-start border-white/20 text-white hover:bg-white/10 hover:text-white bg-white/5 backdrop-blur-sm", hasConnections && "opacity-50 pointer-events-none")} asChild>
+                <a href="/integrations">{hasConnections ? "✓ Accounts Linked" : "2. Connect Social Accounts"}</a>
+              </Button>
+              <Button variant="outline" size="sm" className={cn("justify-start border-white/20 text-white hover:bg-white/10 hover:text-white bg-white/5 backdrop-blur-sm", Number(m.published_this_week) > 0 && "opacity-50 pointer-events-none")} onClick={handleRunScan}>
+                {Number(m.published_this_week) > 0 ? "✓ Generative Engine Active" : "3. Run First AI Scan"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Contextual banners */}
       {!hasConnections && (
@@ -214,12 +258,12 @@ export default function DashboardPage() {
       {/* Metric cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
+          { title: "Posting Streak", value: String(m.posting_streak || 0), sub: "Consecutive days active", icon: Activity, color: "text-rose-500", bg: "bg-rose-500/10", suffix: "🔥" },
           { title: "Total Reach", value: m.total_reach || "0", sub: "All time impressions", icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { title: "Avg. Engagement", value: m.engagement_rate || "0%", sub: "Across all platforms", icon: ArrowUpRight, color: "text-green-500", bg: "bg-green-500/10" },
           { title: "Pending Approval", value: String(m.pending_approvals || 0), sub: Number(m.pending_approvals) > 0 ? "Tap to review" : "All clear!", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
           { title: "Published This Week", value: String(m.published_this_week || 0), sub: "Target: 5 per week", icon: CheckCircle2, color: "text-purple-500", bg: "bg-purple-500/10" },
         ].map((item, i) => (
-          <Card key={i} className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+          <Card key={i} className={cn("transition-all duration-200 hover:-translate-y-0.5", i === 0 && Number(m.posting_streak) > 5 ? "ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20" : "hover:shadow-md")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{item.title}</CardTitle>
               <div className={`h-8 w-8 rounded-lg ${item.bg} flex items-center justify-center`}>
@@ -227,8 +271,10 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-heading">{item.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{item.sub}</p>
+              <div className="text-2xl font-bold font-heading">{item.value} {item.suffix && <span className="opacity-80 ml-1">{item.suffix}</span>}</div>
+              <p className={cn("text-xs mt-1", i === 0 && Number(m.posting_streak) > 0 ? "text-rose-600 font-medium" : "text-muted-foreground")}>
+                {i === 0 && Number(m.posting_streak) > 0 ? `You're on fire! Keep it up.` : item.sub}
+              </p>
             </CardContent>
           </Card>
         ))}

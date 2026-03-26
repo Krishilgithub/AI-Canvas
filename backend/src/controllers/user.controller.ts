@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Response, Request } from "express";
 import { supabase } from "../db";
 import { AuthRequest } from "../middleware/auth.middleware";
 import crypto from "crypto";
@@ -140,6 +140,42 @@ export class UserController {
     } catch (e: any) {
       console.error("Delete Account Error:", e);
       res.status(500).json({ error: e.message });
+    }
+  };
+
+  /**
+   * Get Public Portfolio
+   * Unauthenticated endpoint to fetch user's public info and top posts
+   */
+  getPublicPortfolio = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, bio, role, niche")
+        .eq("id", id)
+        .single();
+        
+      if (profileErr || !profile) return res.status(404).json({ error: "Portfolio not found" });
+
+      const { data: posts, error: postsErr } = await supabase
+        .from("generated_posts")
+        .select("id, content, published_at, ai_metadata")
+        .eq("user_id", id)
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .limit(10);
+        
+      if (postsErr) throw postsErr;
+
+      res.json({
+        profile,
+        posts: posts || []
+      });
+    } catch (e: any) {
+      console.error("Get Public Portfolio Error:", e);
+      res.status(500).json({ error: "Failed to load portfolio" });
     }
   };
 }

@@ -7,6 +7,7 @@ const router = Router();
 // Profile Routes
 router.get("/profile", requireAuth, userController.getProfile);
 router.post("/profile", requireAuth, userController.updateProfile);
+router.get("/portfolio/:id", userController.getPublicPortfolio);
 
 // API Key Routes
 router.post("/profile/api-key", requireAuth, userController.generateApiKey);

@@ -28,6 +28,7 @@ interface NotificationPrefs {
 }
 interface Subscription { plan: string; status: string; next_billing: string | null; }
 interface Profile {
+  id: string;
   full_name: string; email: string; bio: string;
   notification_preferences: NotificationPrefs;
   api_key: string | null; has_api_key: boolean;
@@ -38,6 +39,7 @@ interface LlmKey { provider: string; key: string; isSaved: boolean; }
 // ─── Nav sections ─────────────────────────────────────────────────────────────
 const NAV_SECTIONS = [
   { id: "profile",       label: "Profile",          icon: User,      desc: "Name, bio & avatar" },
+  { id: "portfolio",     label: "Portfolio",        icon: Sparkles,  desc: "Public showcase" },
   { id: "billing",       label: "Billing",          icon: CreditCard, desc: "Plan & payments" },
   { id: "api-keys",      label: "API Keys",         icon: Key,       desc: "Access credentials" },
   { id: "llm",           label: "AI Models",        icon: Brain,     desc: "LLM provider keys" },
@@ -83,7 +85,7 @@ function FieldRow({ label, hint, children }: { label: string; hint?: string; chi
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile] = useState<Profile>({
-    full_name: "", email: "", bio: "",
+    id: "", full_name: "", email: "", bio: "",
     notification_preferences: { weekly_digest: true, post_approval: true, trend_alert: false, security_alert: true },
     api_key: null, has_api_key: false,
     subscription: { plan: "free", status: "active", next_billing: null },
@@ -593,6 +595,42 @@ export default function SettingsPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ PORTFOLIO ════════════════════════════════════════════════ */}
+          {activeSection === "portfolio" && (
+            <div className="bg-card rounded-2xl border border-border shadow-sm">
+              <div className="p-6 border-b border-border/50">
+                <SectionHeader title="Public Creator Portfolio" desc="Showcase your best AI-assisted content to the world." />
+              </div>
+              <div className="p-6">
+                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-6 flex flex-col md:flex-row gap-6 justify-between items-center">
+                   <div>
+                     <h3 className="font-bold text-lg mb-1 flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+                       <Sparkles className="h-5 w-5 text-indigo-500" />
+                       Your Portfolio is Live
+                     </h3>
+                     <p className="text-sm text-foreground/80 w-full md:max-w-md">
+                       Share this link to let others see your top performing AI Canvas content. It automatically updates with your latest published viral posts.
+                     </p>
+                   </div>
+                   <div className="flex flex-col gap-3 w-full md:w-auto shrink-0">
+                      <Button className="w-full justify-start font-mono text-xs dark:hover:bg-indigo-900 border-indigo-200" variant="outline" onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/p/${profile.id}`);
+                        toast.success("Link copied!");
+                      }}>
+                        <Copy className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                        {`/p/${profile.id?.substring(0,8)}...`}
+                      </Button>
+                      <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                        <a href={`/p/${profile.id}`} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-4 w-4 mr-2" /> View Public Page
+                        </a>
+                      </Button>
+                   </div>
+                </div>
               </div>
             </div>
           )}
