@@ -591,6 +591,19 @@ export function OnboardingWizard() {
         }).catch(() => {}); // non-blocking
       }
 
+      // Pre-populate an Interactive Sandbox post
+      await poster("/api/v1/posts", {
+        content: `Welcome to AI Canvas! 👋\n\nThis is your interactive sandbox. Notice how AI has automatically drafted this post based on your workspace setup.\n\nTry clicking "Edit" and highlighting this text to use the new inline AI rewrite tools! 🪄`,
+        scheduled_time: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
+        status: "needs_approval",
+        platform: "linkedin",
+        media_urls: [],
+        ai_metadata: {
+          platform: "linkedin",
+          generated_from: "onboarding-sandbox"
+        }
+      }).catch(() => {});
+
       toast.success("Welcome to AI Canvas! 🚀");
       router.push("/dashboard");
     } catch (e: unknown) {

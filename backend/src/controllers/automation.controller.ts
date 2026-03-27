@@ -1371,6 +1371,31 @@ export class AutomationController {
     }
   };
 
+  // 8. Rewrite Content (Inline Editor)
+  rewriteContent = async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      const { text, instruction, platform } = req.body;
+      if (!text || !instruction) {
+        return res.status(400).json({ error: "text and instruction are required" });
+      }
+
+      // Quota check
+      const quota = await this.checkQuota(user_id);
+      if (!quota.allowed) {
+        return res.status(403).json({ error: "Monthly AI quota exceeded." });
+      }
+
+      const rewritten = await geminiService.rewriteText(text, instruction, user_id, platform);
+      res.json({ success: true, rewritten });
+    } catch (e: any) {
+      console.error("[rewriteContent] Error:", e);
+      res.status(500).json({ error: e.message || "Rewrite failed" });
+    }
+  };
+
   // --- DEV TOOLS ---
   
   // --- VERCEL CRON ---

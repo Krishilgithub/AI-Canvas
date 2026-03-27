@@ -382,18 +382,18 @@ export class AuthController {
   handleRedditCallback = async (req: Request, res: Response) => {
     try {
       const { code, state, error } = req.query;
-      if (error) return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=${error}`);
-      if (!code || !state) return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=invalid_callback`);
+      if (error) return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
+      if (!code || !state) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
 
       const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("ascii"));
       const { user_id } = decodedState;
-      if (!user_id) return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=invalid_state`);
+      if (!user_id) return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
 
       await redditService.exchangeCodeForToken(code as string, user_id);
-      res.redirect(`${process.env.FRONTEND_URL}/integrations?success=reddit_connected`);
+      res.redirect(`${getFrontendUrl()}/integrations?success=reddit_connected`);
     } catch (e: any) {
       console.error("Reddit Callback Error:", e);
-      res.redirect(`${process.env.FRONTEND_URL}/integrations?error=connection_failed`);
+      res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
     }
   };
 

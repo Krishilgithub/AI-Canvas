@@ -146,6 +146,10 @@ export function ContentApproval({ platform }: { platform?: string }) {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkApproving, setBulkApproving] = useState(false);
 
+  // AI Toolbar state
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; text: string; top: number; left: number } | null>(null);
+  const [isRewriting, setIsRewriting] = useState(false);
+
   // Generate dialog
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
@@ -282,6 +286,61 @@ export function ContentApproval({ platform }: { platform?: string }) {
 
   const allSelected = drafts.length > 0 && bulkSelected.size === drafts.length;
   const someSelected = bulkSelected.size > 0;
+
+  // ── AI Toolbar Handling ──────────────────────────────────────────────────
+  const handleMouseUp = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    if (start !== end) {
+      const text = textarea.value.substring(start, end);
+      // Position just above the cursor for simplicity
+      setSelectionRange({
+        start,
+        end,
+        text,
+        top: e.clientY - 50,
+        left: Math.max(10, e.clientX - 150),
+      });
+    } else {
+      setSelectionRange(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.ai-toolbar')) {
+        setSelectionRange(null);
+      }
+    };
+    if (selectionRange) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [selectionRange]);
+
+  const handleRewrite = async (instruction: string) => {
+    if (!selectionRange || !activePost) return;
+    setIsRewriting(true);
+    try {
+      const res = await poster("/rewrite", {
+        text: selectionRange.text,
+        instruction,
+        platform: activePost.platform ?? platform ?? "linkedin",
+      });
+      if (res.rewritten) {
+        const newContent = content.substring(0, selectionRange.start) + res.rewritten + content.substring(selectionRange.end);
+        setContent(newContent);
+        setSelectionRange(null);
+        toast.success("Text improved!");
+      }
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : null) || "Rewrite failed");
+    } finally {
+      setIsRewriting(false);
+    }
+  };
 
   // ── Generate ──────────────────────────────────────────────────────────────
   const handleGenerateDraft = async () => {
@@ -668,12 +727,39 @@ export function ContentApproval({ platform }: { platform?: string }) {
                 {/* Content */}
                 <div className="p-4 md:p-6 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
                   {editMode ? (
-                    <textarea
-                      className="w-full min-h-[260px] bg-transparent resize-y focus:outline-none text-sm leading-relaxed"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      autoFocus
-                    />
+                    <>
+                      <textarea
+                        className="w-full min-h-[260px] bg-transparent resize-y focus:outline-none text-sm leading-relaxed"
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        onMouseUp={handleMouseUp}
+                        autoFocus
+                        disabled={isRewriting}
+                      />
+                      {/* Floating AI Toolbar */}
+                      {selectionRange && (
+                        <div
+                          className="ai-toolbar fixed z-50 flex items-center gap-1 bg-background/95 backdrop-blur-md border shadow-xl rounded-lg p-1.5 animate-in zoom-in duration-200"
+                          style={{ top: selectionRange.top, left: selectionRange.left }}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          <div className="pl-2 pr-1 flex items-center gap-1.5 border-r border-border/50">
+                            <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                            <span className="text-[11px] font-semibold mr-1 uppercase tracking-wider text-muted-foreground">AI Edit</span>
+                          </div>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary" onClick={() => handleRewrite("Make this punchier and more engaging")} disabled={isRewriting}>
+                            Punchier
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary" onClick={() => handleRewrite("Make this shorter and more concise")} disabled={isRewriting}>
+                            Shorter
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary" onClick={() => handleRewrite("Expand on this point with more detail")} disabled={isRewriting}>
+                            Longer
+                          </Button>
+                          {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary ml-1 mr-2" />}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     content
                   )}
