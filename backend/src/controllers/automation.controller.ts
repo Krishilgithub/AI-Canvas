@@ -457,7 +457,7 @@ export class AutomationController {
 
       // Execute Posting via Service
       let resultId: string | null = null;
-      let platform = bodyPlatform || post.ai_metadata?.platform || post.platform || "linkedin";
+      let platform = bodyPlatform || post.ai_metadata?.platform || post.platform || "reddit";
 
       try {
         if (platform === 'twitter') {
