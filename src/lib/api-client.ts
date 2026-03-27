@@ -92,13 +92,13 @@ export async function poster(url: string, body: any = {}) {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    let error: any = {};
-    try {
-      error = text ? JSON.parse(text) : {};
-    } catch (e) {
-      error = { error: text || res.statusText };
-    }
-    throw new Error(error.error || "API Error");
+    let errorData: any = {};
+    try { errorData = text ? JSON.parse(text) : {}; } catch { errorData = { error: text || res.statusText }; }
+    // Surface as much detail as possible for debugging
+    const message = errorData.error || errorData.message || res.statusText || "API Error";
+    const details = errorData.details ? ` (${JSON.stringify(errorData.details)})` : "";
+    const code = errorData.code ? ` [${errorData.code}]` : "";
+    throw new Error(`${message}${code}${details} (HTTP ${res.status})`);
   }
   
   const text = await res.text().catch(() => "");
