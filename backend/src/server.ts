@@ -32,6 +32,7 @@ if (process.env.VERCEL !== "1") {
 }
 
 const app = express();
+app.set("trust proxy", 1); // Trust first proxy (e.g., Vercel) for rate limiting
 const server = http.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
