@@ -434,6 +434,7 @@ export class AutomationController {
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       const { post_id, platform: bodyPlatform } = req.body;
+      console.log(`[triggerPost] user=${user_id} post_id=${post_id} bodyPlatform=${bodyPlatform}`);
 
       // Fetch post ensuring it belongs to user
       const { data: post, error: fetchError } = await supabase
@@ -443,21 +444,27 @@ export class AutomationController {
         .eq("user_id", user_id)
         .single();
 
-      if (fetchError || !post)
-        throw new Error("Post not found or unauthorized");
+      if (fetchError || !post) {
+        console.error(`[triggerPost] Post not found: post_id=${post_id} user_id=${user_id}`, fetchError);
+        return res.status(404).json({ error: "Post not found or you don't have permission to publish it." });
+      }
+
+      console.log(`[triggerPost] post status=${post.status} ai_metadata_platform=${post.ai_metadata?.platform} post.platform=${post.platform}`);
 
       if (
         post.status === PostStatus.PUBLISHED ||
         post.status === PostStatus.REJECTED
       ) {
+        console.error(`[triggerPost] 400: Cannot publish post with status ${post.status}`);
         return res
           .status(400)
-          .json({ error: `Cannot publish a post with status: ${post.status}. Please use a draft or approved post.` });
+          .json({ error: `Cannot publish a post with status: "${post.status}". Only draft, pending, approved, or failed posts can be published.` });
       }
 
       // Execute Posting via Service
       let resultId: string | null = null;
-      let platform = bodyPlatform || post.ai_metadata?.platform || post.platform || "reddit";
+      const platform = bodyPlatform || post.ai_metadata?.platform || post.platform || "linkedin";
+      console.log(`[triggerPost] resolved platform=${platform}`);
 
       try {
         if (platform === 'twitter') {
@@ -470,7 +477,9 @@ export class AutomationController {
           const slackRes: any = await slackService.sendMessage(user_id, post.content);
           resultId = slackRes?.ts || "slack_message_sent";
         } else if (platform === 'reddit') {
-          const redditRes: any = await redditService.postToReddit(user_id, post.content);
+          const subreddit = post.ai_metadata?.subreddit || post.subreddit || "test";
+          console.log(`[triggerPost] Reddit posting to subreddit=${subreddit}`);
+          const redditRes: any = await redditService.postToReddit(user_id, post.content, subreddit);
           resultId = redditRes?.url || "reddit_post_created";
         } else {
           // Default: LinkedIn
@@ -478,8 +487,12 @@ export class AutomationController {
           resultId = liResult?.platform_post_id || liResult?.id || null;
         }
       } catch (err: any) {
+        console.error(`[triggerPost] Platform posting error for ${platform}:`, err.message);
         if (err.message && err.message.toLowerCase().includes("not connected")) {
-            return res.status(400).json({ error: `Please integrate your ${platform} account in Settings to publish posts. (${err.message})` });
+            return res.status(400).json({ 
+              error: `Your ${platform} account is not connected. Please go to Integrations and connect your ${platform} account first.`,
+              code: "ACCOUNT_NOT_CONNECTED"
+            });
         }
         throw new Error(`Failed to post to ${platform}: ${err.message || "Unknown error"}`);
       }
@@ -500,23 +513,23 @@ export class AutomationController {
         user_id,
         action: "post_published",
         level: LogLevel.SUCCESS,
-        message: `Published post ${post_id} to LinkedIn`,
+        message: `Published post ${post_id} to ${platform}`,
       });
 
+      console.log(`[triggerPost] SUCCESS: post_id=${post_id} platform=${platform} resultId=${resultId}`);
       res.json({ success: true, platform_response: { id: resultId, platform } });
     } catch (error: any) {
+      console.error("[triggerPost] FATAL ERROR:", error.message, error.stack);
       await supabase
         .from("generated_posts")
         .update({ status: PostStatus.FAILED })
         .eq("id", req.body.post_id);
       await supabase.from("automation_logs").insert({
-        user_id: req.body.user_id,
+        user_id: req.user?.id,
         action: "post_failed",
         level: LogLevel.ERROR,
         message: error.message || "Unknown error",
       });
-
-      console.error("[triggerPost] FATAL ERROR:", error);
 
       res.status(500).json({
         error: error.message || String(error) || "Unknown error occurred during posting",

@@ -109,7 +109,7 @@ export class RedditService {
     return newAccessToken;
   }
 
-  async postToReddit(userId: string, content: string) {
+  async postToReddit(userId: string, content: string, subreddit = 'test') {
     const { data: accounts, error } = await supabase
       .from('linked_accounts')
       .select('access_token, refresh_token, expires_at')
@@ -132,7 +132,7 @@ export class RedditService {
       // In a real app, this should be selected by the user and saved in the post metadata.
       // For demonstration, we'll try to post to a test subreddit.
       const params = new URLSearchParams();
-      params.append('sr', 'test'); // target subreddit
+      params.append('sr', subreddit); // target subreddit
       params.append('kind', 'self'); // text post
       params.append('title', content.split('\n')[0].substring(0, 300));
       params.append('text', content);
