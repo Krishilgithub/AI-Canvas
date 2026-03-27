@@ -15,7 +15,10 @@ class TwitterService {
   // 1. Generate Auth URL (OAuth2 PKCE)
   getAuthUrl(state: string) {
     const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-    const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+    let appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+    if (!isProd && appUrl.includes("vercel.app")) {
+      appUrl = "http://localhost:4000"; // Force override if .env has prod URL but we are local
+    }
 
     // Let the library generate the secure code verifier and corresponding hashed challenge
     const { url, codeVerifier } = this.client.generateOAuth2AuthLink(
@@ -44,7 +47,10 @@ class TwitterService {
       }
 
       const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-      const appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+      let appUrl = process.env.APP_URL || (isProd ? "https://ai-canvass.vercel.app" : "http://localhost:4000");
+      if (!isProd && appUrl.includes("vercel.app")) {
+        appUrl = "http://localhost:4000";
+      }
 
       const { client: loggedClient, accessToken, refreshToken, expiresIn } = await this.client.loginWithOAuth2({
         code,

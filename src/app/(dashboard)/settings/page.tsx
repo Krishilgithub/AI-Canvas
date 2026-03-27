@@ -16,7 +16,7 @@ import {
   User, CreditCard, Key, Bell, Users, CheckCircle2, Crown,
   RefreshCw, Trash2, Copy, Eye, EyeOff, Loader2, Zap, Shield,
   ChevronRight, Sparkles, ExternalLink, Lock, AlertTriangle,
-  Brain,
+  Brain, BookOpen
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ const NAV_SECTIONS = [
   { id: "llm",           label: "AI Models",        icon: Brain,     desc: "LLM provider keys" },
   { id: "team",          label: "Team",             icon: Users,     desc: "Members & roles" },
   { id: "notifications", label: "Notifications",    icon: Bell,      desc: "Email preferences" },
+  { id: "docs",          label: "Documentation",    icon: BookOpen,  desc: "Platform guides" },
 ];
 
 const LLM_META: Record<string, { label: string; color: string; hint: string }> = {
@@ -64,9 +65,7 @@ function SectionHeader({ title, desc }: { title: string; desc: string }) {
 }
 
 // ─── Divider ──────────────────────────────────────────────────────────────────
-function Divider() {
-  return <div className="border-t border-border/50 my-6" />;
-}
+
 
 // ─── Field row ────────────────────────────────────────────────────────────────
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -97,7 +96,6 @@ export default function SettingsPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -155,7 +153,6 @@ export default function SettingsPage() {
       toast.error("Failed to delete account. Please try again.");
     } finally {
       setSaving(false);
-      setDeleteModalOpen(false);
     }
   };
 
@@ -685,6 +682,27 @@ export default function SettingsPage() {
                 <Button onClick={saveProfile} disabled={saving} variant="outline">
                   {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : "Save Preferences"}
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ DOCUMENTATION ═══════════════════════════════════════════ */}
+          {activeSection === "docs" && (
+            <div className="bg-card rounded-2xl border border-border shadow-sm">
+              <div className="p-6 border-b border-border/50">
+                <SectionHeader title="Documentation & Guides" desc="Learn how to use AI Canvas effectively." />
+              </div>
+              <div className="p-6">
+                <div className="bg-secondary/20 rounded-xl p-8 text-center border border-border/50 flex flex-col items-center">
+                   <div className="h-16 w-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+                     <BookOpen className="h-8 w-8 text-primary" />
+                   </div>
+                   <h3 className="font-semibold text-lg mb-2">Platform Documentation</h3>
+                   <p className="text-sm text-muted-foreground mb-6 max-w-md">Access our comprehensive guides on setting up integrations, configuring AI behavior, and maximizing your social engagement.</p>
+                   <Button asChild className="gap-2">
+                     <a href="/docs"><ExternalLink className="h-4 w-4" /> Go to Documentation Hub</a>
+                   </Button>
+                </div>
               </div>
             </div>
           )}

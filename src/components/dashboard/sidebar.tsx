@@ -12,11 +12,8 @@ import {
   Calendar,
   BarChart3,
   Youtube,
-  MessageSquare,
   Instagram,
-  BookOpen,
   Menu,
-  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signout } from "@/lib/supabase/actions";
@@ -59,7 +56,6 @@ export const navItems = [
   { href: "/calendar",   label: "Calendar",             icon: Calendar,        platform: null },
   { href: "/analytics",  label: "Analytics",            icon: BarChart3,       platform: null },
   { href: "/integrations", label: "Integrations",       icon: Layers,          platform: null },
-  { href: "/docs",       label: "Documentation",        icon: BookOpen,        platform: null },
   { href: "/settings",   label: "Settings",             icon: Settings,        platform: null },
 ];
 

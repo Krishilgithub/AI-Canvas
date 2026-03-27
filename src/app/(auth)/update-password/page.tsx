@@ -15,17 +15,34 @@ export default function UpdatePasswordPage() {
   const supabase = createClient();
 
   useEffect(() => {
-      // Ensure we have a session (handled by auto-login via link)
       const checkSession = async () => {
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(
+              (event) => {
+                  if (event === 'PASSWORD_RECOVERY') {
+                      toast.success("Recovery link validated! You may now reset your password.", { id: "recovery-success" });
+                  }
+              }
+          );
+          
           const { data } = await supabase.auth.getSession();
           if (!data.session) {
-              // Usually the link handles this, but if expired:
-              toast.error("Invalid or expired session. Please request a new link.");
-              router.push('/forgot-password');
+              // Wait a brief moment to allow Supabase to process the URL hash fragment
+              setTimeout(async () => {
+                 const { data: retryData } = await supabase.auth.getSession();
+                 if (!retryData.session) {
+                     toast.error("Invalid or expired session. Please request a new link.");
+                     router.push('/forgot-password');
+                 }
+              }, 1500);
           }
+          
+          return () => {
+              subscription.unsubscribe();
+          };
       };
+      
       checkSession();
-  }, []);
+  }, [router, supabase.auth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
