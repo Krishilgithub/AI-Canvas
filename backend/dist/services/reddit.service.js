@@ -69,15 +69,15 @@ class RedditService {
                     headers: { Authorization: `Bearer ${accessToken}` }
                 });
                 const username = meResponse.data.name;
-                yield db_1.supabase.from('linked_accounts').upsert({
+                yield db_1.supabase.from('integrations').upsert({
                     user_id: userId,
-                    platform: 'reddit',
-                    platform_username: username,
+                    provider: 'reddit',
+                    provider_id: username, // Saving the username here for reference
                     access_token: accessToken,
-                    refresh_token: refreshToken || '', // Reddit sometimes doesn't return this if not requested correctly, but we asked for permanent duration
+                    refresh_token: refreshToken || '',
                     expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-                    status: 'connected',
-                }, { onConflict: 'user_id, platform' });
+                    status: 'active', // Integrations uses 'active' not 'connected'
+                }, { onConflict: 'user_id, provider' });
                 return true;
             }
             catch (e) {
@@ -103,22 +103,22 @@ class RedditService {
             // Reddit might not return a new refresh token; if so, keep the old one.
             const newRefreshToken = response.data.refresh_token || currentRefreshToken;
             const expiresIn = response.data.expires_in;
-            yield db_1.supabase.from('linked_accounts').update({
+            yield db_1.supabase.from('integrations').update({
                 access_token: newAccessToken,
                 refresh_token: newRefreshToken,
                 expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
-            }).eq('user_id', userId).eq('platform', 'reddit');
+            }).eq('user_id', userId).eq('provider', 'reddit');
             return newAccessToken;
         });
     }
-    postToReddit(userId, content) {
-        return __awaiter(this, void 0, void 0, function* () {
+    postToReddit(userId_1, content_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, content, subreddit = 'test') {
             var _a, _b, _c, _d;
             const { data: accounts, error } = yield db_1.supabase
-                .from('linked_accounts')
+                .from('integrations')
                 .select('access_token, refresh_token, expires_at')
                 .eq('user_id', userId)
-                .eq('platform', 'reddit');
+                .eq('provider', 'reddit');
             if (error || !accounts || accounts.length === 0) {
                 throw new Error('Reddit account not connected');
             }
@@ -132,7 +132,7 @@ class RedditService {
                 // In a real app, this should be selected by the user and saved in the post metadata.
                 // For demonstration, we'll try to post to a test subreddit.
                 const params = new URLSearchParams();
-                params.append('sr', 'test'); // target subreddit
+                params.append('sr', subreddit); // target subreddit
                 params.append('kind', 'self'); // text post
                 params.append('title', content.split('\n')[0].substring(0, 300));
                 params.append('text', content);

@@ -305,6 +305,37 @@ Output ONLY the post text. No meta-commentary, no "Here is your post:", no quote
             }
         });
     }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Inline Text Editor Toolbar (Make Punchier, Shorter, Longer, etc)
+    // ─────────────────────────────────────────────────────────────────────────
+    rewriteText(text_1, instruction_1, userId_1) {
+        return __awaiter(this, arguments, void 0, function* (text, instruction, userId, platform = "linkedin") {
+            const model = yield this.getModel(userId);
+            if (!model) {
+                throw new Error("AI_UNAVAILABLE");
+            }
+            const platformRules = getPlatformFormatRules(platform);
+            const prompt = `You are an expert professional social media copywriter.
+Your task is to rewrite the provided text snippet exactly according to this instruction: "${instruction}"
+
+━━━ ORIGINAL TEXT ━━━
+${text}
+
+━━━ PLATFORM STYLE CONTEXT (${platform.toUpperCase()}) ━━━
+${platformRules}
+
+IMPORTANT: Only return the rewritten text snippet. It must seamlessly drop into a larger draft. Do NOT include quotes, "Here is the text", markdown formatting, or hashtags unless explicitly requested in the instruction.`;
+            try {
+                const result = yield model.generateContent(prompt);
+                return result.response.text().trim();
+            }
+            catch (error) {
+                const msg = error instanceof Error ? error.message : String(error);
+                console.error("[GeminiService] rewriteText failed:", msg);
+                throw error;
+            }
+        });
+    }
 }
 exports.GeminiService = GeminiService;
 // ─── Platform format rules ────────────────────────────────────────────────────

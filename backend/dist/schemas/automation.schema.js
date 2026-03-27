@@ -36,6 +36,7 @@ exports.triggerPostSchema = zod_1.z.object({
     body: zod_1.z.object({
         post_id: zod_1.z.string().uuid("Post ID must be a valid UUID"),
         user_id: zod_1.z.string().uuid().optional(),
+        platform: zod_1.z.string().optional(),
     }),
 });
 exports.getConfigSchema = zod_1.z.object({

@@ -148,6 +148,39 @@ class UserController {
                 res.status(500).json({ error: e.message });
             }
         });
+        /**
+         * Get Public Portfolio
+         * Unauthenticated endpoint to fetch user's public info and top posts
+         */
+        this.getPublicPortfolio = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { id } = req.params;
+                const { data: profile, error: profileErr } = yield db_1.supabase
+                    .from("profiles")
+                    .select("id, full_name, bio, role, niche")
+                    .eq("id", id)
+                    .single();
+                if (profileErr || !profile)
+                    return res.status(404).json({ error: "Portfolio not found" });
+                const { data: posts, error: postsErr } = yield db_1.supabase
+                    .from("generated_posts")
+                    .select("id, content, published_at, ai_metadata")
+                    .eq("user_id", id)
+                    .eq("status", "published")
+                    .order("published_at", { ascending: false })
+                    .limit(10);
+                if (postsErr)
+                    throw postsErr;
+                res.json({
+                    profile,
+                    posts: posts || []
+                });
+            }
+            catch (e) {
+                console.error("Get Public Portfolio Error:", e);
+                res.status(500).json({ error: "Failed to load portfolio" });
+            }
+        });
     }
 }
 exports.UserController = UserController;

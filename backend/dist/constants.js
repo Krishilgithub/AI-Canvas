@@ -6,6 +6,8 @@ var Platform;
     Platform["LINKEDIN"] = "linkedin";
     Platform["TWITTER"] = "twitter";
     Platform["YOUTUBE"] = "youtube";
+    Platform["REDDIT"] = "reddit";
+    Platform["INSTAGRAM"] = "instagram";
     Platform["SLACK"] = "slack";
 })(Platform || (exports.Platform = Platform = {}));
 var PostStatus;

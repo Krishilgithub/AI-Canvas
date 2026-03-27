@@ -61,17 +61,17 @@ export class RedditService {
       });
       const username = meResponse.data.name;
 
-      await supabase.from('linked_accounts').upsert(
+      await supabase.from('integrations').upsert(
         {
           user_id: userId,
-          platform: 'reddit',
-          platform_username: username,
+          provider: 'reddit',
+          provider_id: username, // Saving the username here for reference
           access_token: accessToken,
-          refresh_token: refreshToken || '', // Reddit sometimes doesn't return this if not requested correctly, but we asked for permanent duration
+          refresh_token: refreshToken || '',
           expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-          status: 'connected',
+          status: 'active', // Integrations uses 'active' not 'connected'
         },
-        { onConflict: 'user_id, platform' }
+        { onConflict: 'user_id, provider' }
       );
 
       return true;
@@ -100,21 +100,21 @@ export class RedditService {
     const newRefreshToken = response.data.refresh_token || currentRefreshToken;
     const expiresIn = response.data.expires_in;
 
-    await supabase.from('linked_accounts').update({
+    await supabase.from('integrations').update({
        access_token: newAccessToken,
        refresh_token: newRefreshToken,
        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
-    }).eq('user_id', userId).eq('platform', 'reddit');
+    }).eq('user_id', userId).eq('provider', 'reddit');
 
     return newAccessToken;
   }
 
   async postToReddit(userId: string, content: string, subreddit = 'test') {
     const { data: accounts, error } = await supabase
-      .from('linked_accounts')
+      .from('integrations')
       .select('access_token, refresh_token, expires_at')
       .eq('user_id', userId)
-      .eq('platform', 'reddit');
+      .eq('provider', 'reddit');
 
     if (error || !accounts || accounts.length === 0) {
       throw new Error('Reddit account not connected');

@@ -7,6 +7,7 @@ const router = (0, express_1.Router)();
 // Profile Routes
 router.get("/profile", auth_middleware_1.requireAuth, user_controller_1.userController.getProfile);
 router.post("/profile", auth_middleware_1.requireAuth, user_controller_1.userController.updateProfile);
+router.get("/portfolio/:id", user_controller_1.userController.getPublicPortfolio);
 // API Key Routes
 router.post("/profile/api-key", auth_middleware_1.requireAuth, user_controller_1.userController.generateApiKey);
 // Subscription Routes

@@ -401,7 +401,7 @@ export class AuthController {
     try {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
-      const { error } = await supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "reddit");
+      const { error } = await supabase.from("integrations").delete().eq("user_id", user_id).eq("provider", "reddit");
       if (error) throw error;
       res.json({ success: true });
     } catch (e: any) {

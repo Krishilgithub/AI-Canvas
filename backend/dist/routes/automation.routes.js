@@ -39,6 +39,8 @@ router.delete("/team/:id", auth_middleware_1.requireAuth, controller.removeTeamM
 router.post("/trigger-post", auth_middleware_1.requireAuth, (0, validation_middleware_1.validate)(automation_schema_1.triggerPostSchema), controller.triggerPost);
 router.post("/seed", auth_middleware_1.requireAuth, controller.seedData);
 router.post("/generate-manual", auth_middleware_1.requireAuth, controller.generateManualPost);
+router.post("/remix", auth_middleware_1.requireAuth, controller.remixPost);
+router.post("/rewrite", auth_middleware_1.requireAuth, controller.rewriteContent);
 router.get("/quota", auth_middleware_1.requireAuth, controller.getQuotaStatus);
 // Vercel Cron endpoints (Auth handled inside via CRON_SECRET)
 router.get("/cron/process-posts", controller.processCronJobs);

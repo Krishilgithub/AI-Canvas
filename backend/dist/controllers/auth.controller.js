@@ -379,19 +379,19 @@ class AuthController {
             try {
                 const { code, state, error } = req.query;
                 if (error)
-                    return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=${error}`);
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=${error}`);
                 if (!code || !state)
-                    return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=invalid_callback`);
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_callback`);
                 const decodedState = JSON.parse(Buffer.from(state, "base64").toString("ascii"));
                 const { user_id } = decodedState;
                 if (!user_id)
-                    return res.redirect(`${process.env.FRONTEND_URL}/integrations?error=invalid_state`);
+                    return res.redirect(`${getFrontendUrl()}/integrations?error=invalid_state`);
                 yield reddit_service_1.redditService.exchangeCodeForToken(code, user_id);
-                res.redirect(`${process.env.FRONTEND_URL}/integrations?success=reddit_connected`);
+                res.redirect(`${getFrontendUrl()}/integrations?success=reddit_connected`);
             }
             catch (e) {
                 console.error("Reddit Callback Error:", e);
-                res.redirect(`${process.env.FRONTEND_URL}/integrations?error=connection_failed`);
+                res.redirect(`${getFrontendUrl()}/integrations?error=connection_failed`);
             }
         });
         this.disconnectReddit = (req, res) => __awaiter(this, void 0, void 0, function* () {
@@ -400,7 +400,7 @@ class AuthController {
                 const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
                 if (!user_id)
                     return res.status(401).json({ error: "Unauthorized" });
-                const { error } = yield db_1.supabase.from("linked_accounts").delete().eq("user_id", user_id).eq("platform", "reddit");
+                const { error } = yield db_1.supabase.from("integrations").delete().eq("user_id", user_id).eq("provider", "reddit");
                 if (error)
                     throw error;
                 res.json({ success: true });
