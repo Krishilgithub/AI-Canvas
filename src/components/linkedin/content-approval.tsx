@@ -232,7 +232,11 @@ export function ContentApproval({ platform }: { platform?: string }) {
   const handleRegenerate = () => {
     if (!activePost) return;
     toast.promise(
-      poster("/create-draft", { trend_id: activePost.id, regenerate: true }),
+      poster("/create-draft", { 
+        trend_id: activePost.id, 
+        regenerate: true,
+        platform: activePost.platform ?? platform ?? "linkedin"
+      }),
       {
         loading: "Regenerating with AI…",
         success: () => { fetchDrafts(1, false); return "New draft ready in queue!"; },
@@ -261,9 +265,11 @@ export function ContentApproval({ platform }: { platform?: string }) {
     setBulkApproving(true);
     try {
       await Promise.all(
-        Array.from(bulkSelected).map((id) =>
-          poster("/trigger-post", { post_id: id })
-        )
+        Array.from(bulkSelected).map((id) => {
+          const draft = drafts.find(d => d.id === id);
+          const overridePlatform = draft?.platform ?? platform ?? "linkedin";
+          return poster("/trigger-post", { post_id: id, platform: overridePlatform });
+        })
       );
       toast.success(`${bulkSelected.size} post${bulkSelected.size > 1 ? "s" : ""} published!`);
       setBulkSelected(new Set());
@@ -831,7 +837,10 @@ export function ContentApproval({ platform }: { platform?: string }) {
                     variant="outline"
                     disabled={isOverLimit}
                     onClick={() => {
-                      toast.promise(poster("/trigger-post", { post_id: activePost.id }), {
+                      toast.promise(poster("/trigger-post", { 
+                        post_id: activePost.id,
+                        platform: activePost.platform ?? platform ?? "linkedin"
+                      }), {
                         loading: "Publishing now…",
                         success: () => { fetchDrafts(1, false); return "Published!"; },
                         error: "Failed to publish",

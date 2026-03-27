@@ -347,7 +347,7 @@ export function ContentApproval() {
                       toast.promise(
                         poster("/trigger-post", {
                           post_id: activePost.id,
-                          platform: "reddit",
+                          platform: activePost.platform ?? "reddit",
                         }),
                         {
                           loading: "Publishing to Reddit...",
