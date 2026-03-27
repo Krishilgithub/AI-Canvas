@@ -447,14 +447,12 @@ export class AutomationController {
         throw new Error("Post not found or unauthorized");
 
       if (
-        post.status !== PostStatus.APPROVED &&
-        post.status !== PostStatus.SCHEDULED &&
-        post.status !== PostStatus.NEEDS_APPROVAL &&
-        post.status !== PostStatus.FAILED
+        post.status === PostStatus.PUBLISHED ||
+        post.status === PostStatus.REJECTED
       ) {
         return res
           .status(400)
-          .json({ error: "Post is not approved for publishing" });
+          .json({ error: `Cannot publish a post with status: ${post.status}. Please use a draft or approved post.` });
       }
 
       // Execute Posting via Service
