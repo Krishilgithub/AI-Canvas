@@ -433,7 +433,7 @@ export class AutomationController {
       const user_id = req.user?.id;
       if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      const { post_id } = req.body;
+      const { post_id, platform: bodyPlatform } = req.body;
 
       // Fetch post ensuring it belongs to user
       const { data: post, error: fetchError } = await supabase
@@ -459,7 +459,7 @@ export class AutomationController {
 
       // Execute Posting via Service
       let resultId: string | null = null;
-      let platform = post.ai_metadata?.platform || "linkedin";
+      let platform = bodyPlatform || post.ai_metadata?.platform || post.platform || "linkedin";
 
       try {
         if (platform === 'twitter') {

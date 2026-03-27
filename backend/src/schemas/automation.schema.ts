@@ -37,6 +37,7 @@ export const triggerPostSchema = z.object({
   body: z.object({
     post_id: z.string().uuid("Post ID must be a valid UUID"),
     user_id: z.string().uuid().optional(),
+    platform: z.string().optional(),
   }),
 });
 
