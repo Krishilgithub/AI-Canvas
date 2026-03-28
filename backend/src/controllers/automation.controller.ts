@@ -164,18 +164,18 @@ export class AutomationController {
       } else {
         query = "Technology OR Business";
       }
+      console.log(`[SCAN] Fetching from all sources for: ${query} | Platform: ${platform}`);
 
-      console.log(`[SCAN] Fetching news for: ${query} | Platform: ${platform}`);
-
-      // Fetch News
-      const newsItems = await newsService.fetchNews(query);
+      // Fetch from all sources: NewsData.io + Reddit hot posts + HackerNews top stories
+      const newsItems = await newsService.fetchAllSources(query, niches);
 
       if (newsItems.length === 0) {
-        return res.json({ success: true, message: "No new news found", trends: [] });
+        return res.json({ success: true, message: "No new content found across all sources", trends: [] });
       }
 
+      console.log(`[SCAN] Total articles from all sources: ${newsItems.length}`);
+
       // Advanced Trend Intelligence Analysis
-      // FIX: now passes more articles (20 instead of 10) for richer AI analysis
       let analyzedTrends;
       try {
         analyzedTrends = await geminiService.analyzeTrendIntelligence({
@@ -184,7 +184,7 @@ export class AutomationController {
           keywords,
           target_platform: platform,
           time_window: "last 24 hours",
-          platform_data: newsItems.slice(0, 20),
+          platform_data: newsItems.slice(0, 25), // more input = better analysis
           max_trends: 10,
         });
       } catch (aiError: any) {
@@ -194,7 +194,7 @@ export class AutomationController {
             error: "AI scoring unavailable",
             message: "Gemini API key is not configured. Please add a Gemini API key in Settings → AI Models to enable trend scoring and draft generation.",
             action_required: "ADD_GEMINI_KEY",
-            raw_articles: newsItems.slice(0, 10).map((a) => ({ title: a.title, description: a.description })),
+            raw_articles: newsItems.slice(0, 10).map((a) => ({ title: a.title, description: a.description, source_type: a.source_type })),
           });
         }
         throw aiError;

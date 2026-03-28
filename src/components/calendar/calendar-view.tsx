@@ -229,19 +229,22 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* Grid Header */}
-      <div className="grid grid-cols-7 bg-secondary/20">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-          <div key={day} className="py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            {day}
+      {/* Scrollable Container for Mobile */}
+      <div className="flex-1 overflow-x-auto">
+        <div className="min-w-[800px] flex flex-col h-full">
+          {/* Grid Header */}
+          <div className="grid grid-cols-7 bg-secondary/20 shrink-0">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day} className="py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {day}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Calendar Grid */}
-      <div className="flex-1 overflow-y-auto">
-        <DndContext onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-7 h-full auto-rows-[minmax(130px,1fr)]">
+          {/* Calendar Grid */}
+          <div className="flex-1 overflow-y-auto">
+            <DndContext onDragEnd={handleDragEnd}>
+              <div className="grid grid-cols-7 h-full auto-rows-[minmax(130px,1fr)]">
             {days.map((day, idx) => {
               const dayPosts = getPostsForDay(day);
               const isCurrentMonth = isSameMonth(day, monthStart);
@@ -271,6 +274,7 @@ export function CalendarView() {
         </DndContext>
       </div>
     </div>
+  </div>
+</div>
   );
 }
-

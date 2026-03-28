@@ -176,9 +176,9 @@ export function ContentApproval() {
   };
 
   return (
-    <div className="grid lg:grid-cols-12 gap-6 h-auto lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6 lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* 1. Queue List */}
-      <div className="lg:col-span-4 flex flex-col border-r pr-4 overflow-hidden">
+      <div className="lg:col-span-4 flex flex-col border-b pb-4 lg:border-b-0 lg:pb-0 lg:border-r lg:pr-4 h-auto max-h-[500px] lg:h-full lg:max-h-[calc(100vh-220px)] overflow-hidden">
         <h3 className="font-semibold text-lg mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             Content Queue
@@ -336,7 +336,7 @@ export function ContentApproval() {
 
       {/* 2. Editor & Preview Area */}
       {activePost ? (
-        <div className="lg:col-span-8 grid md:grid-cols-2 gap-8 h-full overflow-hidden">
+        <div className="lg:col-span-8 grid md:grid-cols-2 gap-8 h-auto lg:h-full lg:overflow-hidden">
           {/* Editor Column */}
           <div className="flex flex-col gap-6 overflow-y-auto pr-2 pb-10">
             <Card className="border-border shadow-sm">
@@ -474,7 +474,7 @@ export function ContentApproval() {
           </div>
         </div>
       ) : (
-        <div className="lg:col-span-8 flex items-center justify-center h-full border rounded-xl border-dashed text-muted-foreground flex-col gap-2">
+        <div className="lg:col-span-8 flex items-center justify-center h-[300px] lg:h-full border rounded-xl border-dashed text-muted-foreground flex-col gap-2">
           <ImageIcon className="h-10 w-10 opacity-20" />
           <span>Select a draft to review</span>
         </div>

@@ -14,7 +14,9 @@ import {
   Youtube,
   Instagram,
   Menu,
+  Image,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { signout } from "@/lib/supabase/actions";
 import { useState, useEffect } from "react";
@@ -55,9 +57,11 @@ export const navItems = [
   { href: "/instagram",  label: "Instagram",            icon: Instagram,       platform: "instagram" },
   { href: "/calendar",   label: "Calendar",             icon: Calendar,        platform: null },
   { href: "/analytics",  label: "Analytics",            icon: BarChart3,       platform: null },
+  { href: "/media",      label: "Media Library",        icon: Image,           platform: null },
   { href: "/integrations", label: "Integrations",       icon: Layers,          platform: null },
   { href: "/settings",   label: "Settings",             icon: Settings,        platform: null },
 ];
+
 
 // ─── Connection status badge ───────────────────────────────────────────────────
 function ConnectionDot({ connected }: { connected: boolean }) {

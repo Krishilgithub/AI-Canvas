@@ -404,10 +404,10 @@ export function ContentApproval({ platform }: { platform?: string }) {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="grid lg:grid-cols-12 gap-6 h-auto lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6 lg:h-[calc(100vh-220px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* ══ LEFT: Queue ══════════════════════════════════════════════════════ */}
-      <div className="lg:col-span-4 flex flex-col gap-3 h-full max-h-[calc(100vh-220px)] overflow-hidden">
+      <div className="lg:col-span-4 flex flex-col gap-3 h-auto max-h-[500px] lg:h-full lg:max-h-[calc(100vh-220px)]">
 
         {/* Queue header */}
         <div className="flex items-center justify-between shrink-0 gap-2">
@@ -657,7 +657,7 @@ export function ContentApproval({ platform }: { platform?: string }) {
 
       {/* ══ RIGHT: Editor / Preview ══════════════════════════════════════════ */}
       {activePost ? (
-        <Card className="lg:col-span-8 flex flex-col border-border shadow-sm overflow-hidden h-full max-h-[calc(100vh-220px)]">
+        <Card className="lg:col-span-8 flex flex-col border-border shadow-sm overflow-hidden h-auto lg:h-full lg:max-h-[calc(100vh-220px)]">
           {/* Header */}
           <div className="border-b px-5 py-3.5 flex items-center justify-between bg-card shrink-0">
             <div className="flex items-center gap-3 min-w-0">
@@ -905,7 +905,7 @@ export function ContentApproval({ platform }: { platform?: string }) {
           </div>
         </Card>
       ) : (
-        <div className="lg:col-span-8 flex items-center justify-center h-full border rounded-xl border-dashed">
+        <div className="lg:col-span-8 flex items-center justify-center h-[300px] lg:h-full border rounded-xl border-dashed">
           <EmptyState
             icon={FileText}
             title="No draft selected"

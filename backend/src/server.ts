@@ -11,6 +11,10 @@ import postRoutes from "./routes/post.routes";
 import paymentRoutes from "./routes/payment.routes";
 import keysRoutes from "./routes/keys.routes";
 import notificationRoutes from "./routes/notification.routes";
+import accountsRoutes from "./routes/accounts.routes";
+import insightsRoutes from "./routes/insights.routes";
+import mediaRoutes from "./routes/media.routes";
+import commentsRoutes from "./routes/comments.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { schedulerService } from "./services/scheduler.service";
 import swaggerUi from "swagger-ui-express";
@@ -87,12 +91,16 @@ app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/keys", keysRoutes);
-
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/accounts", accountsRoutes);
+app.use("/api/v1/insights", insightsRoutes);
+app.use("/api/v1/media", mediaRoutes);
+app.use("/api/v1/comments", commentsRoutes);
 
 // FIX: Apply AI rate limiter specifically to expensive Gemini endpoints
 app.use("/api/v1/automation/scan", aiLimiter);
 app.use("/api/v1/automation/create-draft", aiLimiter);
+app.use("/api/v1/insights/autopsy", aiLimiter);
 
 // Swagger Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
