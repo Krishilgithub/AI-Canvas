@@ -225,7 +225,7 @@ export function ContentApproval({ platform }: { platform?: string }) {
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!activePost) return;
-    toast.promise(puter(`/posts/${activePost.id}`, { content }), {
+    toast.promise(puter(`/posts/${activePost.id}`, { content, media_urls: activePost.media_urls }), {
       loading: "Saving changes…",
       success: () => { fetchDrafts(1, false); setEditMode(false); return "Draft saved!"; },
       error: "Failed to save draft",
@@ -659,6 +659,9 @@ export function ContentApproval({ platform }: { platform?: string }) {
             <div className="flex gap-2 shrink-0">
               {editMode ? (
                 <>
+                  <MediaPickerModal 
+                    onSelect={(url) => setDrafts(prev => prev.map(d => d.id === activePost.id ? { ...d, media_urls: [...(d.media_urls || []), url] } : d))} 
+                  />
                   <Button variant="outline" size="sm" onClick={() => { setEditMode(false); setContent(activePost.content); }}>
                     Cancel
                   </Button>
@@ -809,6 +812,11 @@ export function ContentApproval({ platform }: { platform?: string }) {
                   </div>
                 </div>
               )}
+
+              {/* Draft Comments */}
+              <div className="pt-2">
+                <DraftComments postId={activePost.id} />
+              </div>
             </div>
           </div>
 

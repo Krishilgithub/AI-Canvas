@@ -5,17 +5,17 @@ const problems = [
   {
     icon: XCircle,
     title: "Generic Content Fatigue",
-    description: "Most AI tools sound exactly like AI. Your audience scrolls past generic ChatGPT content instantly.",
+    description: "Most AI tools sound exactly like AI. Audiences on LinkedIn, Twitter, and Reddit scroll past generic content instantly.",
   },
   {
     icon: Clock,
     title: "Research Paralysis",
-    description: "Spending hours analyzing viral posts manually effectively kills your actual production time.",
+    description: "Manually tracking trends across three different platforms every day drains hours better spent creating.",
   },
   {
     icon: ZapOff,
     title: "Inconsistent Growth",
-    description: "Posting at random times with random topics guarantees you never build true domain authority.",
+    description: "Posting different things on each platform with no unified strategy guarantees you never build true cross-platform authority.",
   }
 ];
 
@@ -24,7 +24,7 @@ export function ProblemSection() {
     <section className="py-24 bg-secondary/30">
       <div className="container px-4 md:px-6 mx-auto">
         <div className="text-center mb-16">
-           <h2 className="text-3xl md:text-5xl font-bold font-heading mb-4 tracking-tight">Why your LinkedIn growth is stuck</h2>
+           <h2 className="text-3xl md:text-5xl font-bold font-heading mb-4 tracking-tight">Why your social media growth is stuck</h2>
            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
              The old way of personal branding is manual, slow, and unscalable.
            </p>

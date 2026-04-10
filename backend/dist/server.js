@@ -16,6 +16,10 @@ const post_routes_1 = __importDefault(require("./routes/post.routes"));
 const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
 const keys_routes_1 = __importDefault(require("./routes/keys.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
+const accounts_routes_1 = __importDefault(require("./routes/accounts.routes"));
+const insights_routes_1 = __importDefault(require("./routes/insights.routes"));
+const media_routes_1 = __importDefault(require("./routes/media.routes"));
+const comments_routes_1 = __importDefault(require("./routes/comments.routes"));
 const error_middleware_1 = require("./middleware/error.middleware");
 const scheduler_service_1 = require("./services/scheduler.service");
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -31,6 +35,7 @@ if (process.env.VERCEL !== "1") {
     scheduler_service_1.schedulerService.start();
 }
 const app = (0, express_1.default)();
+app.set("trust proxy", 1); // Trust first proxy (e.g., Vercel) for rate limiting
 const server = http_1.default.createServer(app); // Create HTTP server from Express app
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -79,9 +84,14 @@ app.use("/api/v1/payment", payment_routes_1.default);
 app.use("/api/v1/auth", auth_routes_1.default);
 app.use("/api/v1/keys", keys_routes_1.default);
 app.use("/api/v1/notifications", notification_routes_1.default);
+app.use("/api/v1/accounts", accounts_routes_1.default);
+app.use("/api/v1/insights", insights_routes_1.default);
+app.use("/api/v1/media", media_routes_1.default);
+app.use("/api/v1/comments", comments_routes_1.default);
 // FIX: Apply AI rate limiter specifically to expensive Gemini endpoints
 app.use("/api/v1/automation/scan", rate_limit_middleware_1.aiLimiter);
 app.use("/api/v1/automation/create-draft", rate_limit_middleware_1.aiLimiter);
+app.use("/api/v1/insights/autopsy", rate_limit_middleware_1.aiLimiter);
 // Swagger Documentation
 app.use("/api-docs", swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.swaggerSpec));
 // Health Check

@@ -306,6 +306,101 @@ Output ONLY the post text. No meta-commentary, no "Here is your post:", no quote
         });
     }
     // ─────────────────────────────────────────────────────────────────────────
+    // Post Autopsy — Analytics Feedback Loop
+    // Analyzes a published post and returns hook/CTA scores + improvement tips
+    // ─────────────────────────────────────────────────────────────────────────
+    analyzePostPerformance(content, platform, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const model = yield this.getModel(userId);
+            if (!model)
+                throw new Error("AI_UNAVAILABLE");
+            const prompt = `You are an expert social media copywriter analyzing a ${platform} post for performance quality.
+
+Analyze the following post and return a structured JSON assessment:
+
+━━━ POST CONTENT ━━━
+${content}
+
+━━━ PLATFORM ━━━
+${platform}
+
+Score the post on:
+1. Hook Score (1–10): How compelling is the opening line? Does it make you want to keep reading?
+2. CTA Score (1–10): How clear and compelling is the call-to-action? Does it drive comments/shares?
+
+Also provide:
+- A 2–3 sentence analysis of overall effectiveness
+- 3 specific, actionable improvement suggestions (not generic advice)
+
+Return ONLY valid JSON in this exact format:
+{
+  "hook_score": 7,
+  "cta_score": 6,
+  "analysis": "The post opens with...",
+  "suggestions": [
+    "Replace the opening line with a question like...",
+    "Add specific data point to support the claim...",
+    "End with a direct question to drive comments..."
+  ]
+}`;
+            try {
+                const result = yield model.generateContent(prompt);
+                const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+                const parsed = JSON.parse(text);
+                return {
+                    hook_score: Math.min(10, Math.max(1, Number(parsed.hook_score) || 5)),
+                    cta_score: Math.min(10, Math.max(1, Number(parsed.cta_score) || 5)),
+                    analysis: String(parsed.analysis || ""),
+                    suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [],
+                };
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error("[GeminiService] analyzePostPerformance failed:", msg);
+                throw err;
+            }
+        });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Draft generator enhanced with top-performing post examples (Feedback Loop)
+    // ─────────────────────────────────────────────────────────────────────────
+    generateDraftWithFeedback(topic_1, context_1, topPosts_1, userContext_1, userId_1) {
+        return __awaiter(this, arguments, void 0, function* (topic, context, topPosts, userContext, userId, platform = "linkedin") {
+            const model = yield this.getModel(userId);
+            if (!model)
+                throw new Error("AI_UNAVAILABLE");
+            const wordTarget = platform.toLowerCase() === "twitter"
+                ? "Under 60 words (hard limit: 280 characters)"
+                : "150–300 words";
+            const examplesSection = topPosts.length > 0
+                ? `\n━━━ YOUR TOP-PERFORMING POSTS (Style Examples) ━━━\nStudy these posts — they performed well for this user. Adopt similar hook structure and CTA style:\n\n${topPosts.map((p, i) => `Example ${i + 1} (Hook: ${p.hook_score}/10, CTA: ${p.cta_score}/10):\n"${p.content.substring(0, 300)}..."`).join("\n\n")}\n`
+                : "";
+            const { role, niche, goals } = userContext || {};
+            const platformRules = getPlatformFormatRules(platform);
+            const prompt = `Write a high-engagement ${platform} post about: "${topic}".
+Context: "${context}".
+${examplesSection}
+Target Niche: ${niche || "General Professional"}
+Author Role: ${role || "Thought Leader"}
+Author Goals: ${goals || "Engagement and Growth"}
+
+━━━ PLATFORM RULES (${platform.toUpperCase()}) ━━━
+${platformRules}
+Length: ${wordTarget}
+Do NOT include hashtags. Output ONLY the post text.`;
+            try {
+                const result = yield model.generateContent(prompt);
+                const draft = result.response.text().trim();
+                return enforcePlatformCharLimit(draft, platform);
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error("[GeminiService] generateDraftWithFeedback failed:", msg);
+                throw err;
+            }
+        });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
     // Inline Text Editor Toolbar (Make Punchier, Shorter, Longer, etc)
     // ─────────────────────────────────────────────────────────────────────────
     rewriteText(text_1, instruction_1, userId_1) {

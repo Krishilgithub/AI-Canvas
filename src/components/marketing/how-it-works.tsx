@@ -12,7 +12,7 @@ const steps = [
   {
     icon: ScanSearch,
     title: "1. Trend Detection",
-    desc: "AI scans LinkedIn & X 24/7 for rising topics in your niche."
+    desc: "AI scans LinkedIn, Twitter/X, and Reddit 24/7 for rising topics in your niche."
   },
   {
     icon: BrainCircuit,
