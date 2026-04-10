@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Linkedin, MessageSquare, Send, Mail, Check, Twitter,
-  Instagram, Youtube, Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronUp,
+  /* Instagram, */ /* Youtube, */ // TODO: re-enable when automation is ready
+  Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -31,9 +32,9 @@ interface LinkedAccount {
 const PLATFORM_CONFIG = [
   { name: "LinkedIn",  key: "linkedin",  icon: Linkedin,      color: "text-[#0077b5]", bg: "bg-[#0077b5]/10", desc: "Primary publishing channel. Read/Write access required." },
   { name: "Twitter",   key: "twitter",   icon: Twitter,       color: "text-[#1DA1F2]", bg: "bg-[#1DA1F2]/10", desc: "Auto-tweet trends and threads." },
-  { name: "Instagram", key: "instagram", icon: Instagram,     color: "text-[#E1306C]", bg: "bg-[#E1306C]/10", desc: "Post visual summaries and reels." },
+  // { name: "Instagram", key: "instagram", icon: Instagram,     color: "text-[#E1306C]", bg: "bg-[#E1306C]/10", desc: "Post visual summaries and reels." }, // TODO: re-enable when Instagram automation is ready
   { name: "Reddit",    key: "reddit",    icon: MessageSquare, color: "text-[#FF4500]", bg: "bg-[#FF4500]/10", desc: "Engage in niche communities." },
-  { name: "YouTube",   key: "youtube",   icon: Youtube,       color: "text-[#FF0000]", bg: "bg-[#FF0000]/10", desc: "Publish video summaries." },
+  // { name: "YouTube",   key: "youtube",   icon: Youtube,       color: "text-[#FF0000]", bg: "bg-[#FF0000]/10", desc: "Publish video summaries." }, // TODO: re-enable when YouTube automation is ready
   { name: "Slack",     key: "slack",     icon: MessageSquare, color: "text-[#4A154B]", bg: "bg-[#4A154B]/10", desc: "Receive real-time notifications." },
   { name: "Telegram",  key: "telegram",  icon: Send,          color: "text-[#0088cc]", bg: "bg-[#0088cc]/10", desc: "Get mobile alerts for trends." },
   { name: "Email",     key: "email",     icon: Mail,          color: "text-orange-500", bg: "bg-orange-500/10", desc: "Receive weekly summaries." },

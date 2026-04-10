@@ -11,8 +11,8 @@ import {
   Layers,
   Calendar,
   BarChart3,
-  Youtube,
-  Instagram,
+  // Youtube,    // TODO: re-enable when YouTube automation is ready
+  // Instagram,  // TODO: re-enable when Instagram automation is ready
   Menu,
   Image,
 } from "lucide-react";
@@ -52,9 +52,9 @@ export const navItems = [
   { href: "/dashboard",  label: "Overview",             icon: LayoutDashboard, platform: null },
   { href: "/linkedin",   label: "LinkedIn",             icon: Linkedin,        platform: "linkedin" },
   { href: "/twitter",    label: "X / Twitter",          icon: XIcon,           platform: "twitter" },
-  { href: "/youtube",    label: "YouTube",              icon: Youtube,         platform: "youtube" },
+  // { href: "/youtube",    label: "YouTube",           icon: Youtube,         platform: "youtube" },    // TODO: re-enable when YouTube automation is ready
   { href: "/reddit",     label: "Reddit",               icon: RedditIcon,      platform: "reddit" },
-  { href: "/instagram",  label: "Instagram",            icon: Instagram,       platform: "instagram" },
+  // { href: "/instagram",  label: "Instagram",          icon: Instagram,       platform: "instagram" }, // TODO: re-enable when Instagram automation is ready
   { href: "/calendar",   label: "Calendar",             icon: Calendar,        platform: null },
   { href: "/analytics",  label: "Analytics",            icon: BarChart3,       platform: null },
   { href: "/media",      label: "Media Library",        icon: Image,           platform: null },
@@ -192,7 +192,7 @@ export function Sidebar() {
           <span>Platform</span>
           <span className="text-[10px] font-normal normal-case">● = connected</span>
         </div>
-        {navItems.slice(0, 6).map((item) => (
+        {navItems.slice(0, 4).map((item) => (
           <NavRow key={item.href} item={item} isActive={pathname === item.href} connections={connections} />
         ))}
 
@@ -237,7 +237,7 @@ export function MobileSidebar() {
               <span>Platform</span>
               <span className="text-[10px] font-normal normal-case">● = connected</span>
             </div>
-            {navItems.slice(0, 6).map((item) => (
+            {navItems.slice(0, 4).map((item) => (
               <NavRow key={item.href} item={item} isActive={pathname === item.href} connections={connections} onClick={() => setOpen(false)} />
             ))}
             <div className="mt-8 mb-4 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Management</div>
