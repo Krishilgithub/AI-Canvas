@@ -1,53 +1,63 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { supabase } from "../db";
 import { encrypt } from "../utils/crypto";
+import { AuthRequest } from "../middleware/auth.middleware";
+import { llmService } from "../services/llm.service";
+
+// ─── Valid LLM providers ──────────────────────────────────────────────────────
+const VALID_PROVIDERS = ["openai", "gemini", "claude"] as const;
+type Provider = typeof VALID_PROVIDERS[number];
 
 export const keysController = {
-  // Save or Update API Key
-  saveKey: async (req: Request, res: Response) => {
+  /**
+   * Save or Update a user's LLM API key.
+   * Uses the authenticated user's ID from JWT — NOT from the request body.
+   */
+  saveKey: async (req: AuthRequest, res: Response) => {
     try {
-      const { user_id, provider, api_key } = req.body;
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      if (!user_id || !provider || !api_key) {
-        return res.status(400).json({ error: "user_id, provider, and api_key are required" });
+      const { provider, apiKey } = req.body;
+
+      if (!provider || !apiKey) {
+        return res.status(400).json({ error: "provider and apiKey are required" });
       }
 
-      if (!['openai', 'gemini', 'claude'].includes(provider)) {
-        return res.status(400).json({ error: "Invalid provider" });
+      if (!VALID_PROVIDERS.includes(provider as Provider)) {
+        return res.status(400).json({ error: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}` });
       }
 
-      const encryptedKey = encrypt(api_key);
+      const encryptedKey = encrypt(apiKey);
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_api_keys")
         .upsert(
-          { 
-            user_id, 
-            provider, 
+          {
+            user_id,
+            provider,
             encrypted_api_key: encryptedKey,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           },
-          { onConflict: 'user_id, provider' }
-        )
-        .select();
+          { onConflict: "user_id,provider" }
+        );
 
       if (error) throw error;
 
-      res.status(200).json({ success: true, message: `Successfully saved ${provider} API key` });
-    } catch (error: any) {
-      console.error("[saveKey] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to save API key" });
+      return res.status(200).json({ success: true, message: `${provider} API key saved and encrypted successfully.` });
+    } catch (error: unknown) {
+      console.error("[keysController.saveKey] Error:", error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save API key" });
     }
   },
 
-  // Get Status of API Keys connected
-  getStatus: async (req: Request, res: Response) => {
+  /**
+   * Get the save status of all LLM API keys for the authenticated user.
+   */
+  getStatus: async (req: AuthRequest, res: Response) => {
     try {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ error: "user_id is required" });
-      }
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
       const { data, error } = await supabase
         .from("user_api_keys")
@@ -56,33 +66,30 @@ export const keysController = {
 
       if (error) throw error;
 
-      // Transform to a mapped object for frontend easily parsing status
-      const status: Record<string, boolean> = {
-        openai: false,
-        gemini: false,
-        claude: false
-      };
-
-      data?.forEach((row: any) => {
-        if (row.provider in status) {
-          status[row.provider] = true;
-        }
+      const keys = (VALID_PROVIDERS as readonly string[]).map((p) => {
+        const row = data?.find((r: { provider: string }) => r.provider === p);
+        return { provider: p, isSaved: !!row, updated_at: row?.updated_at ?? null };
       });
 
-      res.status(200).json({ success: true, keys: status });
-    } catch (error: any) {
-      console.error("[getStatus] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch API key status" });
+      return res.json({ success: true, keys });
+    } catch (error: unknown) {
+      console.error("[keysController.getStatus] Error:", error);
+      return res.status(500).json({ error: "Failed to get key status" });
     }
   },
 
-  // Remove an API Key
-  removeKey: async (req: Request, res: Response) => {
+  /**
+   * Remove a user's LLM API key.
+   */
+  removeKey: async (req: AuthRequest, res: Response) => {
     try {
-      const { user_id, provider } = req.query;
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
 
-      if (!user_id || !provider) {
-        return res.status(400).json({ error: "user_id and provider are required" });
+      const provider = req.query.provider as string;
+
+      if (!provider || !VALID_PROVIDERS.includes(provider as Provider)) {
+        return res.status(400).json({ error: "Valid provider query param required" });
       }
 
       const { error } = await supabase
@@ -93,10 +100,54 @@ export const keysController = {
 
       if (error) throw error;
 
-      res.status(200).json({ success: true, message: `Successfully removed ${provider} API key` });
-    } catch (error: any) {
-      console.error("[removeKey] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to remove API key" });
+      return res.json({ success: true, message: `${provider} API key removed.` });
+    } catch (error: unknown) {
+      console.error("[keysController.removeKey] Error:", error);
+      return res.status(500).json({ error: "Failed to remove API key" });
     }
-  }
+  },
+
+  /**
+   * Set the user's preferred AI model provider.
+   */
+  setPreferredModel: async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      const { provider } = req.body;
+
+      if (!VALID_PROVIDERS.includes(provider as Provider)) {
+        return res.status(400).json({ error: "Invalid provider" });
+      }
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ preferred_ai_model: provider, updated_at: new Date().toISOString() })
+        .eq("id", user_id);
+
+      if (error) throw error;
+
+      return res.json({ success: true, preferred_ai_model: provider });
+    } catch (error: unknown) {
+      console.error("[keysController.setPreferredModel] Error:", error);
+      return res.status(500).json({ error: "Failed to update preferred model" });
+    }
+  },
+
+  /**
+   * Get the user's provider status and preferred model setting.
+   */
+  getProviderStatus: async (req: AuthRequest, res: Response) => {
+    try {
+      const user_id = req.user?.id;
+      if (!user_id) return res.status(401).json({ error: "Unauthorized" });
+
+      const status = await llmService.getProviderStatus(user_id);
+      return res.json({ success: true, ...status });
+    } catch (error: unknown) {
+      console.error("[keysController.getProviderStatus] Error:", error);
+      return res.status(500).json({ error: "Failed to get provider status" });
+    }
+  },
 };

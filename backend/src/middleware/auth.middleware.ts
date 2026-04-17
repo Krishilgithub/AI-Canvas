@@ -31,6 +31,30 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
       return res.status(401).json({ error: 'Malformed authorization header' });
     }
 
+    // ── Support AI Canvas platform API keys (sk_live_...) as Bearer tokens ──
+    if (token.startsWith('sk_live_')) {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('api_key', token)
+        .single();
+
+      if (error || !profile) {
+        return res.status(401).json({ error: 'Invalid AI Canvas API key' });
+      }
+
+      req.user = {
+        id: profile.id,
+        email: profile.email,
+        app_metadata: {},
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: '',
+      } as AuthenticatedUser;
+      return next();
+    }
+
+    // ── Standard Supabase JWT ────────────────────────────────────────────────
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
@@ -46,3 +70,4 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     res.status(500).json({ error: 'Internal server authentication error' });
   }
 };
+

@@ -350,7 +350,7 @@ export class AutomationController {
 
           content = await workflowService.generatePost(
             { topic: trend.topic, platform: targetPlatform },
-            userProfile || undefined,
+            { ...(userProfile || {}), id: user_id }, // FIX: ensure user_id is in context for keysService lookup
             trend.metadata?.insight || "No context"
           );
           

@@ -9,6 +9,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "@google/generative-ai": "^0.24.1",
     "@langchain/core": "^1.1.35",
     "@langchain/google-genai": "^2.1.26",
@@ -24,6 +25,7 @@
     "morgan": "^1.10.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
+    "openai": "^6.34.0",
     "socket.io": "^4.8.3",
     "stripe": "^20.3.0",
     "swagger-jsdoc": "^6.2.8",

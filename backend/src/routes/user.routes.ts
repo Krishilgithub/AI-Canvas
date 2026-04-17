@@ -11,6 +11,7 @@ router.get("/portfolio/:id", userController.getPublicPortfolio);
 
 // API Key Routes
 router.post("/profile/api-key", requireAuth, userController.generateApiKey);
+router.post("/profile/avatar", requireAuth, userController.uploadAvatar);
 
 // Subscription Routes
 router.get(

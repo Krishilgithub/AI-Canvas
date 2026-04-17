@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { SmoothScroll } from "@/components/layout/smooth-scroll";
 import "./globals.css";
 
@@ -36,6 +37,7 @@ export default function RootLayout({
       >
         <SmoothScroll>{children}</SmoothScroll>
         <Toaster position="top-right" theme="dark" />
+        <Analytics />
       </body>
     </html>
   );
